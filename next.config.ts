@@ -20,10 +20,17 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["*.replit.app", "*.replit.dev", "localhost:5000"],
+      // Use `**` so the glob crosses dots — Replit dev domains have multiple
+      // subdomain segments (e.g. `<id>-<rand>.<region>.replit.dev`) and a
+      // single `*` would only match a single label.
+      allowedOrigins: [
+        "**.replit.app",
+        "**.replit.dev",
+        "localhost:5000",
+      ],
     },
   },
-  allowedDevOrigins: ["*.replit.dev", "*.replit.app"],
+  allowedDevOrigins: ["**.replit.dev", "**.replit.app"],
 };
 
 export default nextConfig;

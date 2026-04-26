@@ -20,15 +20,41 @@ import { getCategoryIcon } from "@/components/business/category-icons";
 import { getBusinessById } from "@/features/businesses/queries";
 import { isOpenNow, DAY_NAMES_AR } from "@/lib/working-hours";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import {
+  getMyRating,
+  getRatingDistribution,
+} from "@/features/ratings/queries";
+import { getCommentsForBusiness } from "@/features/comments/queries";
+import { RatingStars } from "@/components/business/RatingStars";
+import { RatingSummary } from "@/components/business/RatingSummary";
+import { CommentSection } from "@/components/business/CommentSection";
 
 export default async function BusinessDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ commentsPage?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const business = await getBusinessById(id);
   if (!business) notFound();
+
+  const session = await auth();
+  const viewerId = session?.user?.id ?? null;
+  const isAdmin =
+    session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
+  const ownsBusiness = viewerId !== null && business.owner?.id === viewerId;
+  const signInHref = `/sign-in?callbackUrl=/businesses/${business.id}`;
+
+  const commentsPage = Math.max(1, Number.parseInt(sp.commentsPage ?? "1", 10) || 1);
+  const [myRating, distribution, comments] = await Promise.all([
+    getMyRating(business.id, viewerId),
+    getRatingDistribution(business.id),
+    getCommentsForBusiness(business.id, viewerId, isAdmin, commentsPage),
+  ]);
 
   // Increment view (non-blocking, ok to await briefly)
   await prisma.businessProfile
@@ -135,6 +161,40 @@ export default async function BusinessDetailPage({
                 </CardContent>
               </Card>
             )}
+
+            <Card id="ratings" className="mt-6 scroll-mt-24">
+              <CardContent className="space-y-5 p-6">
+                <h2 className="text-xl font-bold">التقييمات</h2>
+                <RatingSummary
+                  average={business.ratingAverage}
+                  count={business.ratingCount}
+                  buckets={distribution.buckets}
+                />
+                <div className="rounded-2xl bg-muted/40 p-4">
+                  <h3 className="mb-2 text-sm font-bold">تقييمك</h3>
+                  <RatingStars
+                    businessId={business.id}
+                    initialScore={myRating?.score ?? null}
+                    signedIn={viewerId !== null}
+                    ownsBusiness={ownsBusiness}
+                    signInHref={signInHref}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card id="comments" className="mt-6 scroll-mt-24">
+              <CardContent className="space-y-5 p-6">
+                <h2 className="text-xl font-bold">التعليقات</h2>
+                <CommentSection
+                  businessId={business.id}
+                  page={comments}
+                  viewerId={viewerId}
+                  isAdmin={isAdmin}
+                  signInHref={signInHref}
+                />
+              </CardContent>
+            </Card>
           </div>
 
           <aside className="space-y-4">
