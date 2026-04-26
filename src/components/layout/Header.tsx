@@ -1,0 +1,72 @@
+import Link from "next/link";
+import { auth, signOut } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { MapPin } from "lucide-react";
+
+export async function Header() {
+  const session = await auth();
+  const user = session?.user;
+
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-sm">
+      <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-card">
+            <MapPin className="h-5 w-5" />
+          </div>
+          <div className="leading-tight">
+            <div className="text-lg font-bold text-accent">دليل النبك</div>
+            <div className="text-[11px] text-muted-foreground">مدينتك بين يديك</div>
+          </div>
+        </Link>
+
+        <nav className="hidden items-center gap-6 md:flex">
+          <Link href="/" className="text-sm font-semibold hover:text-accent">
+            الرئيسية
+          </Link>
+          <Link href="/businesses" className="text-sm font-semibold hover:text-accent">
+            تصفح الأعمال
+          </Link>
+          <Link href="/categories" className="text-sm font-semibold hover:text-accent">
+            الأقسام
+          </Link>
+        </nav>
+
+        <div className="flex items-center gap-2">
+          {user ? (
+            <>
+              <Link href="/dashboard">
+                <Button variant="outline" size="sm">
+                  لوحة التحكم
+                </Button>
+              </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut({ redirectTo: "/" });
+                }}
+              >
+                <Button type="submit" variant="ghost" size="sm">
+                  خروج
+                </Button>
+              </form>
+            </>
+          ) : (
+            <>
+              <Link href="/sign-in" className="hidden sm:block">
+                <Button variant="ghost" size="sm">
+                  دخول
+                </Button>
+              </Link>
+              <Link href="/dashboard/listings/new">
+                <Button variant="primary" size="sm">
+                  أضف عملك
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

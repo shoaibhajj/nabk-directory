@@ -1,0 +1,391 @@
+// Prisma schema for دليل النبك — pinned to Prisma 6.x
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  GUEST
+  BUSINESS_OWNER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum BusinessStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MediaStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PhoneLabel {
+  MOBILE
+  LANDLINE
+  WHATSAPP
+  FAX
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  TWITTER
+  TIKTOK
+  WHATSAPP
+  TELEGRAM
+  WEBSITE
+}
+
+enum CommentStatus {
+  VISIBLE
+  HIDDEN_BY_ADMIN
+  DELETED_BY_USER
+}
+
+enum AuditAction {
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_DELETED
+  LISTING_CREATED
+  LISTING_UPDATED
+  LISTING_SUBMITTED
+  LISTING_SUSPENDED
+  LISTING_RESTORED
+  LISTING_DELETED
+  MEDIA_UPLOADED
+  MEDIA_APPROVED
+  MEDIA_REJECTED
+  CATEGORY_CREATED
+  CATEGORY_UPDATED
+  CATEGORY_DELETED
+  SUGGESTION_APPROVED
+  SUGGESTION_REJECTED
+  COMMENT_HIDDEN
+  COMMENT_RESTORED
+  RATING_DELETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String?
+  role          Role      @default(BUSINESS_OWNER)
+  emailVerified DateTime?
+  image         String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions                Session[]
+  accounts                Account[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  businessProfiles        BusinessProfile[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  categorySuggestions     CategorySuggestion[]
+  ratings                 Rating[]
+  comments                Comment[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model City {
+  id        String            @id @default(cuid())
+  nameAr    String
+  nameEn    String
+  slug      String            @unique
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  listings  BusinessProfile[]
+
+  @@map("cities")
+}
+
+model Category {
+  id           String            @id @default(cuid())
+  nameAr       String
+  nameEn       String
+  slug         String            @unique
+  icon         String?
+  description  String?
+  displayOrder Int               @default(0)
+  isActive     Boolean           @default(true)
+  parentId     String?
+  parent       Category?         @relation("SubCategories", fields: [parentId], references: [id])
+  children     Category[]        @relation("SubCategories")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  listings     BusinessProfile[]
+  subListings  BusinessProfile[] @relation("Subcategory")
+
+  @@map("categories")
+}
+
+model CategorySuggestion {
+  id            String           @id @default(cuid())
+  suggestedById String
+  nameAr        String
+  nameEn        String?
+  reason        String?
+  status        SuggestionStatus @default(PENDING)
+  adminNote     String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  suggestedBy   User             @relation(fields: [suggestedById], references: [id])
+
+  @@map("category_suggestions")
+}
+
+model BusinessProfile {
+  id               String         @id @default(cuid())
+  ownerId          String
+  cityId           String
+  categoryId       String
+  subcategoryId    String?
+  nameAr           String
+  nameEn           String?
+  slug             String         @unique
+  descriptionAr    String?        @db.Text
+  descriptionEn    String?        @db.Text
+  addressAr        String?
+  latitude         Float?
+  longitude        Float?
+  status           BusinessStatus @default(DRAFT)
+  coverImageId     String?
+  logoImageId      String?
+  viewCount        Int            @default(0)
+  searchableText   String?        @db.Text
+  ratingAverage    Float          @default(0)
+  ratingCount      Int            @default(0)
+  publishedAt      DateTime?
+  suspendedAt      DateTime?
+  suspensionReason String?
+  deletedAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  owner        User           @relation(fields: [ownerId], references: [id])
+  city         City           @relation(fields: [cityId], references: [id])
+  category     Category       @relation(fields: [categoryId], references: [id])
+  subcategory  Category?      @relation("Subcategory", fields: [subcategoryId], references: [id])
+  phoneNumbers PhoneNumber[]
+  workingHours WorkingHours[]
+  socialLinks  SocialLink[]
+  mediaFiles   MediaFile[]
+  ratings      Rating[]
+  comments     Comment[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status])
+  @@map("business_profiles")
+}
+
+model Rating {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  userId            String
+  score             Int
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessProfileId, userId])
+  @@index([businessProfileId])
+  @@map("ratings")
+}
+
+model Comment {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  userId            String
+  content           String          @db.Text
+  status            CommentStatus   @default(VISIBLE)
+  hiddenReason      String?
+  parentId          String?
+  parent            Comment?        @relation("Replies", fields: [parentId], references: [id])
+  replies           Comment[]       @relation("Replies")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessProfileId, createdAt(sort: Desc)])
+  @@map("comments")
+}
+
+model PhoneNumber {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  label             PhoneLabel      @default(MOBILE)
+  number            String
+  displayOrder      Int             @default(0)
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@map("phone_numbers")
+}
+
+model WorkingHours {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  dayOfWeek         Int
+  isOpen            Boolean         @default(true)
+  openTime          String?
+  closeTime         String?
+  is24Hours         Boolean         @default(false)
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([businessProfileId, dayOfWeek])
+  @@map("working_hours")
+}
+
+model SocialLink {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  platform          SocialPlatform
+  url               String
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@map("social_links")
+}
+
+model MediaFile {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  uploadedById      String
+  type              MediaType
+  storageKey        String
+  url               String
+  thumbnailUrl      String?
+  fileSize          Int?
+  mimeType          String?
+  width             Int?
+  height            Int?
+  duration          Int?
+  status            MediaStatus     @default(APPROVED)
+  rejectionReason   String?
+  displayOrder      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+}
+
+model Notification {
+  id                String   @id @default(cuid())
+  userId            String
+  type              String
+  titleAr           String
+  messageAr         String
+  isRead            Boolean  @default(false)
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  actorId        String?
+  actorEmail     String?
+  actorRole      Role?
+  action         AuditAction
+  entityType     String
+  entityId       String
+  previousValues Json?
+  newValues      Json?
+  ipAddress      String?
+  createdAt      DateTime    @default(now())
+  actor          User?       @relation(fields: [actorId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model PlatformSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("platform_settings")
+}

@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #FCFAF8;
+  --color-foreground: #2E261F;
+  --color-muted: #F8F6F3;
+  --color-muted-foreground: #7E7367;
+  --color-border: #E8E2DA;
+  --color-input: #F8F6F3;
+
+  --color-primary: #F2930D;
+  --color-primary-foreground: #FFFFFF;
+  --color-primary-border: #CB7B0B;
+
+  --color-accent: #1A664D;
+  --color-accent-foreground: #FFFFFF;
+  --color-accent-border: #114534;
+
+  --color-secondary: #E7F6E9;
+  --color-secondary-foreground: #1A664D;
+
+  --color-card: #FFFFFF;
+  --color-card-foreground: #2E261F;
+
+  --color-destructive: #DC2626;
+  --color-destructive-foreground: #FFFFFF;
+
+  --color-star: #F59E0B;
+
+  --font-sans: var(--font-cairo), "Cairo", "Noto Naskh Arabic", system-ui, sans-serif;
+  --font-heading: var(--font-naskh), "Noto Naskh Arabic", "Cairo", serif;
+
+  --radius-pill: 9999px;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+.gradient-hero {
+  background: radial-gradient(ellipse at top, #FFE9C9 0%, #FCFAF8 60%);
+}
+
+.shadow-soft {
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05), 0 1px 2px -1px rgba(0,0,0,0.05);
+}
+
+.shadow-card {
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -2px rgba(0,0,0,0.04);
+}
+
+.shadow-cta {
+  box-shadow: 0 10px 15px -3px rgba(242,147,13,0.2), 0 4px 6px -4px rgba(242,147,13,0.18);
+}
