@@ -6,7 +6,39 @@ import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, MapPin, Clock, Star, Eye, Share2, MessageCircle } from "lucide-react";
+import {
+  Phone,
+  MapPin,
+  Clock,
+  Star,
+  Eye,
+  Share2,
+  MessageCircle,
+  Pill,
+  Stethoscope,
+  Coffee,
+  ShoppingBasket,
+  Wrench,
+  Scissors,
+  GraduationCap,
+  Home as HomeIcon,
+  Shirt,
+  Hammer,
+  Store,
+} from "lucide-react";
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  pharmacies: Pill,
+  clinics: Stethoscope,
+  restaurants: Coffee,
+  grocery: ShoppingBasket,
+  auto: Wrench,
+  salons: Scissors,
+  education: GraduationCap,
+  mosques: HomeIcon,
+  clothing: Shirt,
+  construction: Hammer,
+};
 import { getBusinessById } from "@/features/businesses/queries";
 import { isOpenNow, DAY_NAMES_AR } from "@/lib/working-hours";
 import { prisma } from "@/lib/prisma";
@@ -30,12 +62,16 @@ export default async function BusinessDetailPage({
   const whatsappPhone = phones.find((p) => p.label === "WHATSAPP")?.number ?? phones[0]?.number;
   const images = business.mediaFiles.filter((m) => m.type === "IMAGE");
   const cover = images[0];
+  const CategoryIcon = CATEGORY_ICONS[business.category.slug] ?? Store;
+  const initial = business.nameAr.replace(/^(ال|دكتور|د\.|عيادة|مطعم|كافيه|ورشة|سوبرماركت|صيدلية|مدرسة|محل)\s*/, "").trim().charAt(0)
+    || business.nameAr.charAt(0);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <article className="container mx-auto px-4 py-8">
+        {/* Gradient hero with empty-state category icon when no cover image */}
         {cover ? (
           <div className="relative aspect-[16/6] w-full overflow-hidden rounded-3xl bg-muted">
             <Image
@@ -47,34 +83,55 @@ export default async function BusinessDetailPage({
             />
           </div>
         ) : (
-          <div className="aspect-[16/6] w-full rounded-3xl bg-gradient-to-l from-secondary to-muted" />
+          <div
+            className="relative flex aspect-[16/6] w-full items-center justify-center overflow-hidden rounded-3xl"
+            style={{
+              background:
+                "linear-gradient(135deg, #E7F6E9 0%, #F4F0E6 45%, #FFE9C9 100%)",
+            }}
+          >
+            <CategoryIcon className="h-24 w-24 text-primary/30 md:h-32 md:w-32" />
+          </div>
         )}
 
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-bold md:text-4xl">{business.nameAr}</h1>
-              {status.open ? (
-                <Badge variant="accent">مفتوح الآن</Badge>
-              ) : (
-                <Badge variant="outline">مغلق</Badge>
-              )}
-            </div>
+            <div className="flex flex-wrap items-start gap-4">
+              {/* Letter-avatar tile (matches reference site) */}
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-muted text-4xl font-bold text-muted-foreground shadow-soft md:h-24 md:w-24">
+                {initial}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-3xl font-bold md:text-4xl">{business.nameAr}</h1>
+                  {status.open ? (
+                    <Badge variant="accent">مفتوح الآن</Badge>
+                  ) : (
+                    <Badge variant="outline">مغلق</Badge>
+                  )}
+                </div>
+                {business.nameEn && (
+                  <p className="mt-1 text-sm text-muted-foreground" dir="ltr">
+                    {business.nameEn}
+                  </p>
+                )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <Link href={`/category/${business.category.slug}`}>
-                <Badge variant="default">{business.category.nameAr}</Badge>
-              </Link>
-              {business.ratingCount > 0 && (
-                <span className="inline-flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-[var(--color-star)] text-[var(--color-star)]" />
-                  <strong className="text-foreground">{business.ratingAverage.toFixed(1)}</strong>
-                  <span>({business.ratingCount} تقييم)</span>
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1">
-                <Eye className="h-4 w-4" /> {business.viewCount.toLocaleString("ar-EG")} مشاهدة
-              </span>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <Link href={`/category/${business.category.slug}`}>
+                    <Badge variant="default">{business.category.nameAr}</Badge>
+                  </Link>
+                  {business.ratingCount > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-[var(--color-star)] text-[var(--color-star)]" />
+                      <strong className="text-foreground">{business.ratingAverage.toFixed(1)}</strong>
+                      <span>({business.ratingCount} تقييم)</span>
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <Eye className="h-4 w-4" /> {business.viewCount.toLocaleString("ar-EG")} مشاهدة
+                  </span>
+                </div>
+              </div>
             </div>
 
             <Card className="mt-6">

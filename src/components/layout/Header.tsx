@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { MapPin } from "lucide-react";
+import { Store, Info } from "lucide-react";
 
 export async function Header() {
   const session = await auth();
@@ -11,12 +11,12 @@ export async function Header() {
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-sm">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-card">
-            <MapPin className="h-5 w-5" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-cta">
+            <Store className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <div className="text-lg font-bold text-accent">دليل النبك</div>
-            <div className="text-[11px] text-muted-foreground">مدينتك بين يديك</div>
+            <div className="text-lg font-bold text-foreground">دليل النبك</div>
+            <div className="text-[11px] text-muted-foreground">كل ما تحتاجه في مدينتك</div>
           </div>
         </Link>
 
@@ -25,10 +25,10 @@ export async function Header() {
             الرئيسية
           </Link>
           <Link href="/businesses" className="text-sm font-semibold hover:text-accent">
-            تصفح الأعمال
+            الدليل
           </Link>
-          <Link href="/categories" className="text-sm font-semibold hover:text-accent">
-            الأقسام
+          <Link href="/categories" className="inline-flex items-center gap-1 text-sm font-semibold hover:text-accent">
+            <Info className="h-4 w-4" /> عن الدليل
           </Link>
         </nav>
 
