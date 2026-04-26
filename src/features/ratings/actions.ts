@@ -69,8 +69,9 @@ export async function submitRatingAction(
   }
 
   let previousScore: number | null = null;
+  let ratingId: string;
   try {
-    previousScore = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const prior = await tx.rating.findUnique({
         where: {
           businessProfileId_userId: {
@@ -80,7 +81,7 @@ export async function submitRatingAction(
         },
         select: { score: true },
       });
-      await tx.rating.upsert({
+      const upserted = await tx.rating.upsert({
         where: {
           businessProfileId_userId: {
             businessProfileId: business.id,
@@ -93,10 +94,13 @@ export async function submitRatingAction(
           score: parsed.data.score,
         },
         update: { score: parsed.data.score },
+        select: { id: true },
       });
       await recalcInTx(tx, business.id);
-      return prior?.score ?? null;
+      return { ratingId: upserted.id, prior: prior?.score ?? null };
     });
+    ratingId = result.ratingId;
+    previousScore = result.prior;
   } catch (e) {
     console.error("[submitRatingAction] tx failed", e);
     return { ok: false, error: "فشل حفظ التقييم. حاول مرة أخرى." };
@@ -110,9 +114,12 @@ export async function submitRatingAction(
     },
     action: "RATING_SUBMITTED",
     entityType: "Rating",
-    entityId: business.id,
-    before: previousScore !== null ? { score: previousScore } : undefined,
-    after: { score: parsed.data.score },
+    entityId: ratingId,
+    before:
+      previousScore !== null
+        ? { score: previousScore, businessProfileId: business.id }
+        : { businessProfileId: business.id },
+    after: { score: parsed.data.score, businessProfileId: business.id },
   });
 
   revalidatePath(`/businesses/${business.id}`);
@@ -144,14 +151,20 @@ export async function deleteOwnRatingAction(
           userId: session.user.id,
         },
       },
-      select: { score: true },
+      select: { id: true, score: true },
     });
     const deleted = await tx.rating.deleteMany({
       where: { businessProfileId: businessId, userId: session.user.id },
     });
-    if (deleted.count === 0) return { count: 0, score: null } as const;
+    if (deleted.count === 0) {
+      return { count: 0, score: null, ratingId: null } as const;
+    }
     await recalcInTx(tx, businessId);
-    return { count: deleted.count, score: prior?.score ?? null } as const;
+    return {
+      count: deleted.count,
+      score: prior?.score ?? null,
+      ratingId: prior?.id ?? null,
+    } as const;
   });
 
   if (result.count === 0) {
@@ -166,8 +179,11 @@ export async function deleteOwnRatingAction(
     },
     action: "RATING_REMOVED_BY_USER",
     entityType: "Rating",
-    entityId: businessId,
-    before: result.score !== null ? { score: result.score } : undefined,
+    entityId: result.ratingId ?? businessId,
+    before:
+      result.score !== null
+        ? { score: result.score, businessProfileId: businessId }
+        : { businessProfileId: businessId },
   });
 
   revalidatePath(`/businesses/${businessId}`);

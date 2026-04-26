@@ -193,6 +193,12 @@ export async function adminApproveCommentAction(
     select: { id: true, status: true, businessProfileId: true },
   });
   if (!comment) return { ok: false, error: "التعليق غير موجود." };
+  if (comment.status !== "PENDING_REVIEW") {
+    return {
+      ok: false,
+      error: "لا يمكن اعتماد هذا التعليق (ليس قيد المراجعة).",
+    };
+  }
 
   await prisma.comment.update({
     where: { id: commentId },
