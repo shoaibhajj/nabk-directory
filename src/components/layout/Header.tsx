@@ -38,6 +38,13 @@ export async function Header() {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              {user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? (
+                <Link href="/admin">
+                  <Button variant="ghost" size="sm">
+                    الإدارة
+                  </Button>
+                </Link>
+              ) : null}
               <Link href="/dashboard">
                 <Button variant="outline" size="sm">
                   لوحة التحكم

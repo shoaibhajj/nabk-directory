@@ -42,6 +42,52 @@ export function verifyEmailHtml(name: string, link: string) {
   `;
 }
 
+export function listingApprovedHtml(name: string, businessName: string, link: string) {
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">دليل النبك</h2>
+      <p>مرحباً ${name},</p>
+      <p>تم اعتماد عملك <strong>«${businessName}»</strong> ونشره في الدليل.</p>
+      <p><a href="${link}" style="background:#F2930D;color:#fff;padding:12px 24px;border-radius:9999px;text-decoration:none">عرض الصفحة</a></p>
+      <p style="color:#7E7367;font-size:12px;margin-top:24px">شكراً لمساهمتك في إثراء دليل النبك.</p>
+    </div>
+  `;
+}
+
+export function listingRejectedHtml(
+  name: string,
+  businessName: string,
+  reason: string,
+  dashboardLink: string,
+) {
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">دليل النبك</h2>
+      <p>مرحباً ${name},</p>
+      <p>للأسف لم نتمكن من نشر عملك <strong>«${businessName}»</strong> في الدليل.</p>
+      <p style="background:#fff;border:1px solid #E5DFD7;padding:12px;border-radius:8px"><strong>السبب:</strong> ${reason}</p>
+      <p>يمكنك تعديل البيانات وإعادة الإرسال:</p>
+      <p><a href="${dashboardLink}" style="background:#1A664D;color:#fff;padding:12px 24px;border-radius:9999px;text-decoration:none">فتح لوحة التحكم</a></p>
+    </div>
+  `;
+}
+
+export function listingSuspendedHtml(
+  name: string,
+  businessName: string,
+  reason: string,
+) {
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">دليل النبك</h2>
+      <p>مرحباً ${name},</p>
+      <p>تم إيقاف عرض عملك <strong>«${businessName}»</strong> مؤقتاً في الدليل.</p>
+      <p style="background:#fff;border:1px solid #E5DFD7;padding:12px;border-radius:8px"><strong>السبب:</strong> ${reason}</p>
+      <p>للاستفسار يرجى التواصل مع الإدارة.</p>
+    </div>
+  `;
+}
+
 export function passwordResetHtml(name: string, link: string) {
   return `
     <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
