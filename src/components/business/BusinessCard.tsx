@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Phone, MapPin, Clock, Star } from "lucide-react";
 import { isOpenNow } from "@/lib/working-hours";
+import { getCategoryIcon } from "@/components/business/category-icons";
 import type { BusinessProfile, Category, PhoneNumber, WorkingHours } from "@prisma/client";
 
 type CardData = BusinessProfile & {
@@ -15,6 +16,7 @@ type CardData = BusinessProfile & {
 export function BusinessCard({ business }: { business: CardData }) {
   const status = isOpenNow(business.workingHours);
   const phone = business.phoneNumbers[0]?.number;
+  const CategoryIcon = getCategoryIcon(business.category.slug);
 
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
@@ -34,12 +36,17 @@ export function BusinessCard({ business }: { business: CardData }) {
               <Badge variant="default">{business.category.nameAr}</Badge>
             </Link>
           </div>
-          {business.ratingCount > 0 && (
-            <div className="flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-1">
-              <Star className="h-3.5 w-3.5 fill-[var(--color-star)] text-[var(--color-star)]" />
-              <span className="text-xs font-bold">{business.ratingAverage.toFixed(1)}</span>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent">
+              <CategoryIcon className="h-5 w-5" />
             </div>
-          )}
+            {business.ratingCount > 0 && (
+              <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
+                <Star className="h-3.5 w-3.5 fill-[var(--color-star)] text-[var(--color-star)]" />
+                <span className="text-xs font-bold">{business.ratingAverage.toFixed(1)}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {business.descriptionAr && (

@@ -14,31 +14,9 @@ import {
   Eye,
   Share2,
   MessageCircle,
-  Pill,
-  Stethoscope,
-  Coffee,
-  ShoppingBasket,
-  Wrench,
-  Scissors,
-  GraduationCap,
-  Home as HomeIcon,
-  Shirt,
-  Hammer,
-  Store,
 } from "lucide-react";
 
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  pharmacies: Pill,
-  clinics: Stethoscope,
-  restaurants: Coffee,
-  grocery: ShoppingBasket,
-  auto: Wrench,
-  salons: Scissors,
-  education: GraduationCap,
-  mosques: HomeIcon,
-  clothing: Shirt,
-  construction: Hammer,
-};
+import { getCategoryIcon } from "@/components/business/category-icons";
 import { getBusinessById } from "@/features/businesses/queries";
 import { isOpenNow, DAY_NAMES_AR } from "@/lib/working-hours";
 import { prisma } from "@/lib/prisma";
@@ -62,7 +40,7 @@ export default async function BusinessDetailPage({
   const whatsappPhone = phones.find((p) => p.label === "WHATSAPP")?.number ?? phones[0]?.number;
   const images = business.mediaFiles.filter((m) => m.type === "IMAGE");
   const cover = images[0];
-  const CategoryIcon = CATEGORY_ICONS[business.category.slug] ?? Store;
+  const CategoryIcon = getCategoryIcon(business.category.slug);
   const initial = business.nameAr.replace(/^(ال|دكتور|د\.|عيادة|مطعم|كافيه|ورشة|سوبرماركت|صيدلية|مدرسة|محل)\s*/, "").trim().charAt(0)
     || business.nameAr.charAt(0);
 
