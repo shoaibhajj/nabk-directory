@@ -37,6 +37,7 @@ CREATE TABLE "users" (
     "role" "Role" NOT NULL DEFAULT 'BUSINESS_OWNER',
     "emailVerified" TIMESTAMP(3),
     "image" TEXT,
+    "passwordChangedAt" TIMESTAMP(3),
     "deletedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -94,6 +95,18 @@ CREATE TABLE "password_reset_tokens" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "password_reset_tokens_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "login_tokens" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "login_tokens_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -316,6 +329,9 @@ CREATE UNIQUE INDEX "email_verification_tokens_tokenHash_key" ON "email_verifica
 CREATE UNIQUE INDEX "password_reset_tokens_tokenHash_key" ON "password_reset_tokens"("tokenHash");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "login_tokens_tokenHash_key" ON "login_tokens"("tokenHash");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "cities_slug_key" ON "cities"("slug");
 
 -- CreateIndex
@@ -356,6 +372,9 @@ ALTER TABLE "email_verification_tokens" ADD CONSTRAINT "email_verification_token
 
 -- AddForeignKey
 ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "login_tokens" ADD CONSTRAINT "login_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "categories" ADD CONSTRAINT "categories_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;

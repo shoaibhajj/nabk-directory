@@ -123,7 +123,15 @@ export async function signOutAndRedirect() {
 
 const verifyEmailSchema = z.object({ token: z.string().min(10) });
 
-export async function verifyEmailAction(token: string) {
+/**
+ * Verifies the email-verification token and, on success, mints a single-use
+ * `LoginToken` so the caller can auto-sign-the-user-in without re-entering
+ * a password. The caller (a server action invoked from /verify-email) is
+ * responsible for handing the `loginToken` to `signIn("credentials", { ... })`.
+ */
+export async function verifyEmailAction(
+  token: string,
+): Promise<{ ok?: boolean; error?: string; loginToken?: string }> {
   const parsed = verifyEmailSchema.safeParse({ token });
   if (!parsed.success) return { error: "رابط غير صالح" };
 
@@ -133,6 +141,8 @@ export async function verifyEmailAction(token: string) {
   if (!record || record.usedAt || record.expiresAt < new Date()) {
     return { error: "الرابط منتهي أو مستخدم سابقاً" };
   }
+
+  const loginToken = crypto.randomBytes(32).toString("hex");
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
@@ -142,8 +152,19 @@ export async function verifyEmailAction(token: string) {
       where: { id: record.id },
       data: { usedAt: new Date() },
     }),
+    prisma.loginToken.create({
+      data: {
+        userId: record.userId,
+        tokenHash: hashToken(loginToken),
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      },
+    }),
   ]);
-  return { ok: true };
+  return { ok: true, loginToken };
+}
+
+export async function autoSignInAfterVerify(loginToken: string) {
+  await signIn("credentials", { oneTimeToken: loginToken, redirectTo: "/dashboard" });
 }
 
 const forgotSchema = z.object({ email: z.string().email() });
@@ -206,10 +227,12 @@ export async function resetPasswordAction(
     return { error: "الرابط منتهي أو مستخدم سابقاً" };
   }
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  // Bumping `passwordChangedAt` invalidates all existing JWT sessions
+  // for this user (see auth.ts JWT callback).
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.userId },
-      data: { passwordHash },
+      data: { passwordHash, passwordChangedAt: new Date() },
     }),
     prisma.passwordResetToken.update({
       where: { id: record.id },

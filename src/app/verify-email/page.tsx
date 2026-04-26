@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
-import { verifyEmailAction } from "@/features/auth/actions";
+import { verifyEmailAction, autoSignInAfterVerify } from "@/features/auth/actions";
 
 export default async function VerifyEmailPage({
   searchParams,
@@ -10,7 +10,7 @@ export default async function VerifyEmailPage({
   searchParams: Promise<{ token?: string; sent?: string; pending?: string }>;
 }) {
   const sp = await searchParams;
-  let result: { ok?: boolean; error?: string } | undefined;
+  let result: { ok?: boolean; error?: string; loginToken?: string } | undefined;
   if (sp.token) {
     result = await verifyEmailAction(sp.token);
   }
@@ -35,15 +35,22 @@ export default async function VerifyEmailPage({
               </p>
             )}
 
-            {sp.token && result?.ok && (
+            {sp.token && result?.ok && result.loginToken && (
               <>
                 <p className="text-accent">تم تأكيد بريدك الإلكتروني بنجاح.</p>
-                <Link
-                  href="/sign-in"
-                  className="inline-block rounded-full bg-primary px-6 py-2 font-bold text-white"
+                <form
+                  action={async () => {
+                    "use server";
+                    await autoSignInAfterVerify(result!.loginToken!);
+                  }}
                 >
-                  تسجيل الدخول
-                </Link>
+                  <button
+                    type="submit"
+                    className="inline-block rounded-full bg-primary px-6 py-2 font-bold text-white"
+                  >
+                    الانتقال إلى لوحة التحكم
+                  </button>
+                </form>
               </>
             )}
 

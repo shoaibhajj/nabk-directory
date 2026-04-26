@@ -86,21 +86,25 @@ enum AuditAction {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  passwordHash  String?
-  role          Role      @default(BUSINESS_OWNER)
-  emailVerified DateTime?
-  image         String?
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  passwordHash      String?
+  role              Role      @default(BUSINESS_OWNER)
+  emailVerified     DateTime?
+  image             String?
+  // Bumped whenever the password is reset; the JWT callback compares this
+  // against the token's issued-at to invalidate older sessions.
+  passwordChangedAt DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   sessions                Session[]
   accounts                Account[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  loginTokens             LoginToken[]
   businessProfiles        BusinessProfile[]
   notifications           Notification[]
   auditLogs               AuditLog[]
@@ -162,6 +166,18 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+model LoginToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_tokens")
 }
 
 model City {
