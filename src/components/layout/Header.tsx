@@ -27,7 +27,10 @@ export async function Header() {
           <Link href="/businesses" className="text-sm font-semibold hover:text-accent">
             الدليل
           </Link>
-          <Link href="/categories" className="inline-flex items-center gap-1 text-sm font-semibold hover:text-accent">
+          <Link href="/categories" className="text-sm font-semibold hover:text-accent">
+            الأقسام
+          </Link>
+          <Link href="/about" className="inline-flex items-center gap-1 text-sm font-semibold hover:text-accent">
             <Info className="h-4 w-4" /> عن الدليل
           </Link>
         </nav>

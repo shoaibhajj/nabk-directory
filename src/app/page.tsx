@@ -67,10 +67,9 @@ export default async function HomePage() {
           <span className="inline-block rounded-full bg-secondary px-4 py-1.5 text-sm font-semibold text-accent">
             مدينتك بين يديك
           </span>
-          <h1 className="mt-6 text-4xl font-bold leading-tight text-foreground md:text-6xl">
+          <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-foreground md:text-6xl">
             ابحث عن أي شيء في
-            <br />
-            مدينة النبك
+            <span className="mt-2 block text-accent">مدينة النبك</span>
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground md:text-xl">
             أطباء، صيدليات، مطاعم، مهنيين، وكل ما تحتاجه من خدمات وأعمال في
