@@ -78,13 +78,31 @@ export async function postCommentAction(
   const isPrivileged = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const status = isPrivileged || !isNewAccount ? "VISIBLE" : "PENDING_REVIEW";
 
-  await prisma.comment.create({
+  const created = await prisma.comment.create({
     data: {
       businessProfileId: business.id,
       userId: user.id,
       content: parsed.data.content,
       parentId: parsed.data.parentId,
       status,
+    },
+    select: { id: true },
+  });
+
+  await recordAudit({
+    actor: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      role: session.user.role ?? null,
+    },
+    action: "COMMENT_POSTED",
+    entityType: "Comment",
+    entityId: created.id,
+    after: {
+      businessProfileId: business.id,
+      parentId: parsed.data.parentId ?? null,
+      status,
+      contentLength: parsed.data.content.length,
     },
   });
 
@@ -124,6 +142,18 @@ export async function deleteOwnCommentAction(
       deletedAt: new Date(),
       content: "",
     },
+  });
+
+  await recordAudit({
+    actor: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      role: session.user.role ?? null,
+    },
+    action: "COMMENT_REMOVED_BY_USER",
+    entityType: "Comment",
+    entityId: comment.id,
+    before: { businessProfileId: comment.businessProfileId },
   });
 
   revalidatePath(`/businesses/${comment.businessProfileId}`);

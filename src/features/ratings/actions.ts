@@ -68,8 +68,18 @@ export async function submitRatingAction(
     return { ok: false, error: "لا يمكنك تقييم عملك الخاص." };
   }
 
+  let previousScore: number | null = null;
   try {
-    await prisma.$transaction(async (tx) => {
+    previousScore = await prisma.$transaction(async (tx) => {
+      const prior = await tx.rating.findUnique({
+        where: {
+          businessProfileId_userId: {
+            businessProfileId: business.id,
+            userId: session.user.id,
+          },
+        },
+        select: { score: true },
+      });
       await tx.rating.upsert({
         where: {
           businessProfileId_userId: {
@@ -85,11 +95,25 @@ export async function submitRatingAction(
         update: { score: parsed.data.score },
       });
       await recalcInTx(tx, business.id);
+      return prior?.score ?? null;
     });
   } catch (e) {
     console.error("[submitRatingAction] tx failed", e);
     return { ok: false, error: "فشل حفظ التقييم. حاول مرة أخرى." };
   }
+
+  await recordAudit({
+    actor: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      role: session.user.role ?? null,
+    },
+    action: "RATING_SUBMITTED",
+    entityType: "Rating",
+    entityId: business.id,
+    before: previousScore !== null ? { score: previousScore } : undefined,
+    after: { score: parsed.data.score },
+  });
 
   revalidatePath(`/businesses/${business.id}`);
   return { ok: true };
@@ -113,17 +137,38 @@ export async function deleteOwnRatingAction(
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    const prior = await tx.rating.findUnique({
+      where: {
+        businessProfileId_userId: {
+          businessProfileId: businessId,
+          userId: session.user.id,
+        },
+      },
+      select: { score: true },
+    });
     const deleted = await tx.rating.deleteMany({
       where: { businessProfileId: businessId, userId: session.user.id },
     });
-    if (deleted.count === 0) return { count: 0 } as const;
+    if (deleted.count === 0) return { count: 0, score: null } as const;
     await recalcInTx(tx, businessId);
-    return { count: deleted.count } as const;
+    return { count: deleted.count, score: prior?.score ?? null } as const;
   });
 
   if (result.count === 0) {
     return { ok: false, error: "لم يتم العثور على تقييم لحذفه." };
   }
+
+  await recordAudit({
+    actor: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      role: session.user.role ?? null,
+    },
+    action: "RATING_REMOVED_BY_USER",
+    entityType: "Rating",
+    entityId: businessId,
+    before: result.score !== null ? { score: result.score } : undefined,
+  });
 
   revalidatePath(`/businesses/${businessId}`);
   return { ok: true };

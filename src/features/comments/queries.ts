@@ -1,21 +1,27 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const PAGE_SIZE = 10;
 
 const commentInclude = {
   user: { select: { id: true, name: true, role: true, image: true } },
-} as const;
+} satisfies Prisma.CommentInclude;
 
-export type CommentWithUser = Awaited<
-  ReturnType<typeof prisma.comment.findFirst>
-> & {
-  user: { id: string; name: string; role: string; image: string | null };
-  replies: Array<
-    Awaited<ReturnType<typeof prisma.comment.findFirst>> & {
-      user: { id: string; name: string; role: string; image: string | null };
-    }
-  >;
-};
+const commentWithRepliesInclude = {
+  ...commentInclude,
+  replies: {
+    orderBy: { createdAt: "asc" },
+    include: commentInclude,
+  },
+} satisfies Prisma.CommentInclude;
+
+export type CommentWithUser = Prisma.CommentGetPayload<{
+  include: typeof commentInclude;
+}>;
+
+export type CommentWithReplies = Prisma.CommentGetPayload<{
+  include: typeof commentWithRepliesInclude;
+}>;
 
 export async function getCommentsForBusiness(
   businessId: string,

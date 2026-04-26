@@ -38,11 +38,11 @@ export function CommentSection({
           {page.items.map((c) => (
             <CommentItem
               key={c.id}
-              comment={c as any}
+              comment={c}
               businessId={businessId}
               viewerId={viewerId}
               isAdmin={isAdmin}
-              replies={(c as any).replies ?? []}
+              replies={c.replies}
             />
           ))}
         </ul>
