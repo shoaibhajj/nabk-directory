@@ -58,9 +58,19 @@ COPY --from=builder --chown=nextjs:nodejs \
 COPY --from=builder --chown=nextjs:nodejs \
   /repo/artifacts/nabk-directory/public ./artifacts/nabk-directory/public
 
-# Prisma binaries + schema for runtime migrations
+# Prisma schema + CLI for runtime migrations (`prisma migrate deploy`).
+# The Next standalone bundle does NOT include the `prisma` CLI by default,
+# so we copy it explicitly along with the engines and the schema.
 COPY --from=builder --chown=nextjs:nodejs \
   /repo/artifacts/nabk-directory/prisma ./artifacts/nabk-directory/prisma
+COPY --from=builder --chown=nextjs:nodejs \
+  /repo/node_modules/.pnpm ./node_modules/.pnpm
+COPY --from=builder --chown=nextjs:nodejs \
+  /repo/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs \
+  /repo/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs \
+  /repo/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
 USER nextjs
 EXPOSE 3000

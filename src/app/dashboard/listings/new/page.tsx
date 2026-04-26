@@ -8,7 +8,8 @@ import { auth } from "@/lib/auth";
 
 export default async function NewListingPage() {
   const session = await auth();
-  if (!session?.user) redirect("/sign-in");
+  // Auth + email-verification enforced by `dashboard/layout.tsx`.
+  if (!session?.user) redirect("/sign-in?callbackUrl=/dashboard/listings/new");
 
   return (
     <div className="min-h-screen bg-background">

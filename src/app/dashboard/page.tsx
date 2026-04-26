@@ -10,7 +10,10 @@ import { prisma } from "@/lib/prisma";
 
 export default async function DashboardPage() {
   const session = await auth();
-  if (!session?.user) redirect("/sign-in");
+  // Auth + email-verification is enforced by `dashboard/layout.tsx`.
+  // The non-null assertion below is safe because the layout would have
+  // already redirected unauthenticated callers.
+  if (!session?.user) redirect("/sign-in?callbackUrl=/dashboard");
 
   const listings = await prisma.businessProfile.findMany({
     where: { ownerId: session.user.id, deletedAt: null },

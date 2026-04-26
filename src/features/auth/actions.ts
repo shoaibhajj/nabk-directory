@@ -3,11 +3,23 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { signIn } from "@/lib/auth";
-import { sendEmail, verifyEmailHtml } from "@/lib/email";
+import { sendEmail, verifyEmailHtml, passwordResetHtml } from "@/lib/email";
 import { getAppUrl } from "@/lib/utils";
+import { withRateLimit } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/audit";
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+async function clientIp() {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anon";
+}
 
 const signUpSchema = z.object({
   name: z.string().min(2, "الاسم قصير جداً"),
@@ -15,7 +27,16 @@ const signUpSchema = z.object({
   password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
 });
 
-export async function signUpAction(_prev: { error?: string } | undefined, formData: FormData) {
+export async function signUpAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const ip = await clientIp();
+  const limited = await withRateLimit(`signup:${ip}`, 5, 60 * 60 * 1000);
+  if (!limited.ok) {
+    return { error: "محاولات كثيرة، حاول لاحقاً" };
+  }
+
   const parsed = signUpSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -37,13 +58,11 @@ export async function signUpAction(_prev: { error?: string } | undefined, formDa
     data: { name, email: normalized, passwordHash, role: "BUSINESS_OWNER" },
   });
 
-  // Email verification token
   const token = crypto.randomBytes(32).toString("hex");
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   await prisma.emailVerificationToken.create({
     data: {
       userId: user.id,
-      tokenHash,
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
@@ -53,13 +72,15 @@ export async function signUpAction(_prev: { error?: string } | undefined, formDa
     subject: "تأكيد البريد الإلكتروني — دليل النبك",
     html: verifyEmailHtml(user.name, link),
   });
-
-  await signIn("credentials", {
-    email: normalized,
-    password,
-    redirectTo: "/dashboard",
+  await recordAudit({
+    actor: { id: user.id, email: user.email, role: user.role },
+    action: "USER_CREATED",
+    entityType: "User",
+    entityId: user.id,
+    ipAddress: ip,
   });
-  return { error: undefined };
+
+  redirect("/verify-email?sent=1");
 }
 
 const signInSchema = z.object({
@@ -67,7 +88,16 @@ const signInSchema = z.object({
   password: z.string().min(1),
 });
 
-export async function signInAction(_prev: { error?: string } | undefined, formData: FormData) {
+export async function signInAction(
+  _prev: { error?: string } | undefined,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const ip = await clientIp();
+  const limited = await withRateLimit(`signin:${ip}`, 10, 15 * 60 * 1000);
+  if (!limited.ok) {
+    return { error: "محاولات كثيرة، حاول لاحقاً" };
+  }
+
   const parsed = signInSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -89,4 +119,102 @@ export async function signInAction(_prev: { error?: string } | undefined, formDa
 
 export async function signOutAndRedirect() {
   redirect("/api/auth/signout");
+}
+
+const verifyEmailSchema = z.object({ token: z.string().min(10) });
+
+export async function verifyEmailAction(token: string) {
+  const parsed = verifyEmailSchema.safeParse({ token });
+  if (!parsed.success) return { error: "رابط غير صالح" };
+
+  const record = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash: hashToken(parsed.data.token) },
+  });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return { error: "الرابط منتهي أو مستخدم سابقاً" };
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { emailVerified: new Date() },
+    }),
+    prisma.emailVerificationToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+  return { ok: true };
+}
+
+const forgotSchema = z.object({ email: z.string().email() });
+
+export async function forgotPasswordAction(
+  _prev: { sent?: boolean; error?: string } | undefined,
+  formData: FormData,
+): Promise<{ sent?: boolean; error?: string }> {
+  const ip = await clientIp();
+  const limited = await withRateLimit(`forgot:${ip}`, 5, 60 * 60 * 1000);
+  if (!limited.ok) {
+    return { error: "محاولات كثيرة، حاول لاحقاً" };
+  }
+  const parsed = forgotSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) return { error: "بريد إلكتروني غير صحيح" };
+
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email.toLowerCase() },
+  });
+  // Always pretend success to avoid user enumeration
+  if (user && !user.deletedAt) {
+    const token = crypto.randomBytes(32).toString("hex");
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    const link = `${getAppUrl()}/reset-password?token=${token}`;
+    await sendEmail({
+      to: user.email,
+      subject: "إعادة تعيين كلمة المرور — دليل النبك",
+      html: passwordResetHtml(user.name, link),
+    });
+  }
+  return { sent: true };
+}
+
+const resetSchema = z.object({
+  token: z.string().min(10),
+  password: z.string().min(8, "8 أحرف على الأقل"),
+});
+
+export async function resetPasswordAction(
+  _prev: { ok?: boolean; error?: string } | undefined,
+  formData: FormData,
+): Promise<{ ok?: boolean; error?: string }> {
+  const parsed = resetSchema.safeParse({
+    token: formData.get("token"),
+    password: formData.get("password"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" };
+  }
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashToken(parsed.data.token) },
+  });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return { error: "الرابط منتهي أو مستخدم سابقاً" };
+  }
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
+  return { ok: true };
 }

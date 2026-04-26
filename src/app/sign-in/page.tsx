@@ -17,6 +17,11 @@ export default function SignInPage() {
         <Card>
           <CardContent className="p-6">
             <SignInForm googleEnabled={isGoogleEnabled} />
+            <div className="mt-4 text-center text-sm">
+              <Link href="/forgot-password" className="text-accent hover:underline">
+                نسيت كلمة المرور؟
+              </Link>
+            </div>
             <p className="mt-6 text-center text-sm text-muted-foreground">
               ليس لديك حساب؟{" "}
               <Link href="/sign-up" className="font-bold text-accent hover:underline">
