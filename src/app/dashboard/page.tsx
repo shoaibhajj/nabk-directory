@@ -11,8 +11,6 @@ import { prisma } from "@/lib/prisma";
 export default async function DashboardPage() {
   const session = await auth();
   // Auth + email-verification is enforced by `dashboard/layout.tsx`.
-  // The non-null assertion below is safe because the layout would have
-  // already redirected unauthenticated callers.
   if (!session?.user) redirect("/sign-in?callbackUrl=/dashboard");
 
   const listings = await prisma.businessProfile.findMany({
@@ -48,32 +46,35 @@ export default async function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {listings.map((b) => (
                 <Card key={b.id}>
-                  <CardContent className="space-y-2 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <Link
-                        href={`/businesses/${b.id}`}
-                        className="text-lg font-bold hover:text-accent"
-                      >
-                        {b.nameAr}
-                      </Link>
-                      <Badge
-                        variant={
-                          b.status === "ACTIVE"
-                            ? "accent"
-                            : b.status === "SUSPENDED"
-                              ? "destructive"
-                              : "outline"
-                        }
-                      >
-                        {b.status === "ACTIVE"
-                          ? "منشور"
-                          : b.status === "SUSPENDED"
-                            ? "معلّق"
-                            : "مسودة"}
-                      </Badge>
+                  <CardContent className="space-y-3 p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/businesses/${b.id}`}
+                          className="block truncate text-lg font-bold hover:text-accent"
+                        >
+                          {b.nameAr}
+                        </Link>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {b.category.nameAr} · {b.viewCount} مشاهدة
+                        </div>
+                      </div>
+                      <StatusBadge status={b.status} />
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {b.category.nameAr} · {b.viewCount} مشاهدة
+                    {b.status === "REJECTED" && b.suspensionReason && (
+                      <p className="rounded-xl bg-red-50 p-2 text-xs text-red-700">
+                        سبب الرفض: {b.suspensionReason}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Link href={`/dashboard/listings/${b.id}/edit/basics`}>
+                        <Button variant="outline" size="sm">تعديل</Button>
+                      </Link>
+                      {b.status === "ACTIVE" && (
+                        <Link href={`/businesses/${b.id}`}>
+                          <Button variant="ghost" size="sm">عرض</Button>
+                        </Link>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -85,4 +86,12 @@ export default async function DashboardPage() {
       <Footer />
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "ACTIVE") return <Badge variant="accent">منشور</Badge>;
+  if (status === "PENDING") return <Badge variant="warning">قيد المراجعة</Badge>;
+  if (status === "SUSPENDED") return <Badge variant="destructive">معلّق</Badge>;
+  if (status === "REJECTED") return <Badge variant="destructive">مرفوض</Badge>;
+  return <Badge variant="outline">مسودة</Badge>;
 }

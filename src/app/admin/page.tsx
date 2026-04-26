@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -25,6 +27,8 @@ export default async function AdminPage() {
     prisma.user.count({ where: { deletedAt: null } }),
     prisma.categorySuggestion.count({ where: { status: "PENDING" } }),
   ]);
+
+  const pendingCount = businessCounts.PENDING ?? 0;
 
   const tiles: Array<{
     href: string;
@@ -74,6 +78,24 @@ export default async function AdminPage() {
         <StatCard label="التقييمات" value={ratingCount} />
         <StatCard label="اقتراحات الفئات" value={pendingSuggestions} />
       </div>
+
+      <Card className="mt-8">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-6">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold">طابور المراجعة</h2>
+            {pendingCount > 0 ? (
+              <Badge variant="warning">{pendingCount} ينتظر</Badge>
+            ) : (
+              <Badge variant="outline">لا يوجد</Badge>
+            )}
+          </div>
+          <Link href="/admin/moderation">
+            <Button variant="primary" size="md">
+              فتح طابور المراجعة
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       <h2 className="mt-10 text-xl font-bold">مهام المراجعة</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
+import { createDraftListingAction } from "@/features/businesses/mutations";
 
 export default async function NewListingPage() {
   const session = await auth();
-  // Auth + email-verification enforced by `dashboard/layout.tsx`.
   if (!session?.user) redirect("/sign-in?callbackUrl=/dashboard/listings/new");
 
   return (
@@ -16,15 +15,18 @@ export default async function NewListingPage() {
       <Header />
       <section className="container mx-auto max-w-2xl px-4 py-12">
         <Card>
-          <CardContent className="space-y-4 p-8 text-center">
+          <CardContent className="space-y-5 p-8 text-center">
             <h1 className="text-2xl font-bold">إضافة عمل جديد</h1>
             <p className="text-muted-foreground">
-              معالج إضافة العمل (5 خطوات: الأساسيات، التواصل، الصور، ساعات العمل،
-              المعاينة) قيد التطوير. سيتم إكماله في تحديث قادم.
+              سننشئ مسودة فارغة الآن، ثم تقودك المعالج عبر 5 خطوات: الأساسيات →
+              التصنيف والموقع → التواصل → ساعات العمل → الصور. يمكنك حفظ تقدمك
+              في أي وقت والعودة لاحقاً.
             </p>
-            <Link href="/dashboard">
-              <Button variant="outline" size="md">العودة إلى لوحة التحكم</Button>
-            </Link>
+            <form action={createDraftListingAction} className="flex justify-center gap-3">
+              <Button type="submit" variant="primary" size="lg">
+                ابدأ المسودة
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </section>

@@ -18,8 +18,10 @@ enum Role {
 
 enum BusinessStatus {
   DRAFT
+  PENDING
   ACTIVE
   SUSPENDED
+  REJECTED
 }
 
 enum MediaType {
