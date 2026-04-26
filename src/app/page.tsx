@@ -17,30 +17,8 @@ import {
   LayoutGrid,
   MapPin,
   TrendingUp,
-  Pill,
-  Stethoscope,
-  Coffee,
-  ShoppingCart,
-  Wrench,
-  Scissors,
-  GraduationCap,
-  Home,
-  Shirt,
-  Hammer,
 } from "lucide-react";
-
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  pharmacies: Pill,
-  clinics: Stethoscope,
-  restaurants: Coffee,
-  grocery: ShoppingCart,
-  auto: Wrench,
-  salons: Scissors,
-  education: GraduationCap,
-  mosques: Home,
-  clothing: Shirt,
-  construction: Hammer,
-};
+import { getCategoryIcon } from "@/components/business/category-icons";
 
 async function searchAction(formData: FormData) {
   "use server";
@@ -127,7 +105,7 @@ export default async function HomePage() {
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {categories.map((c) => {
-            const Icon = CATEGORY_ICONS[c.slug] ?? LayoutGrid;
+            const Icon = getCategoryIcon(c.slug);
             return (
               <Link key={c.id} href={`/category/${c.slug}`}>
                 <Card className="h-full transition-all hover:-translate-y-0.5 hover:shadow-lg">
