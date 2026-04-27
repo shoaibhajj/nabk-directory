@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cairo, Noto_Naskh_Arabic } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const cairo = Cairo({
@@ -27,7 +28,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} ${naskh.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster position="top-center" richColors dir="rtl" />
+      </body>
     </html>
   );
 }

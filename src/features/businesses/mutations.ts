@@ -616,6 +616,85 @@ export async function removePhotoAction(
   }
 }
 
+// ---------- Owner: soft-delete listing ----------
+
+export async function softDeleteListingAction(
+  id: string,
+): Promise<ActionResult> {
+  try {
+    const session = await auth();
+    if (!session?.user) return { ok: false, error: "يجب تسجيل الدخول" };
+
+    const existing = await prisma.businessProfile.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        ownerId: true,
+        slug: true,
+        nameAr: true,
+        status: true,
+        deletedAt: true,
+        category: { select: { slug: true } },
+      },
+    });
+    const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+    const isOwner = existing?.ownerId === session.user.id;
+    if (!existing || (!isOwner && !isSuperAdmin)) {
+      return { ok: false, error: "ليس لديك صلاحية حذف هذا العمل" };
+    }
+    if (existing.deletedAt !== null) {
+      return { ok: true };
+    }
+
+    const updated = await prisma.businessProfile.updateMany({
+      where: isSuperAdmin
+        ? { id, deletedAt: null }
+        : { id, ownerId: session.user.id, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+
+    if (updated.count === 0) {
+      const recheck = await prisma.businessProfile.findUnique({
+        where: { id },
+        select: { ownerId: true, deletedAt: true },
+      });
+      if (recheck?.deletedAt) return { ok: true };
+      if (!isSuperAdmin && recheck?.ownerId !== session.user.id) {
+        return { ok: false, error: "ليس لديك صلاحية حذف هذا العمل" };
+      }
+      return { ok: false, error: "تعذّر حذف العمل" };
+    }
+
+    await recordAudit({
+      actor: {
+        id: session.user.id,
+        email: session.user.email ?? null,
+        role: session.user.role,
+      },
+      action: "LISTING_DELETED",
+      entityType: "BusinessProfile",
+      entityId: id,
+      before: { status: existing.status, slug: existing.slug },
+      after: { deletedAt: new Date().toISOString() },
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/businesses");
+    revalidatePath(`/businesses/${id}`);
+    revalidatePath("/categories");
+    revalidatePath("/admin/moderation");
+    revalidatePath("/admin/businesses");
+    revalidatePath("/admin");
+    revalidatePath("/");
+    if (existing.category?.slug) {
+      revalidatePath(`/category/${existing.category.slug}`);
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
 // ---------- Submit for review ----------
 
 export async function submitForReviewAction(id: string): Promise<ActionResult> {

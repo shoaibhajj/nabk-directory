@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { DeleteListingButton } from "@/components/business/DeleteListingButton";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -75,6 +76,10 @@ export default async function DashboardPage() {
                           <Button variant="ghost" size="sm">عرض</Button>
                         </Link>
                       )}
+                      <DeleteListingButton
+                        listingId={b.id}
+                        listingName={b.nameAr}
+                      />
                     </div>
                   </CardContent>
                 </Card>
