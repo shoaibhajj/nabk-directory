@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 const businessCardInclude = {
   category: true,
+  subcategory: true,
   phoneNumbers: { orderBy: { displayOrder: "asc" } },
   workingHours: true,
 } satisfies Prisma.BusinessProfileInclude;
@@ -45,6 +46,7 @@ export async function getActiveBusinesses(opts?: {
 
 const businessDetailInclude = {
   category: true,
+  subcategory: true,
   city: true,
   owner: { select: { id: true, name: true } },
   phoneNumbers: { orderBy: { displayOrder: "asc" } },

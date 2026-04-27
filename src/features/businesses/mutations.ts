@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueListingSlug } from "@/lib/slug";
 import { recordAudit } from "@/lib/audit";
+import { detectVideoEmbed } from "@/lib/video";
 import {
   type PhoneLabel,
   type SocialPlatform,
@@ -506,35 +507,49 @@ export async function uploadPhotoAction(
     const mimeType: string | undefined = undefined;
     const fileSize: number | undefined = undefined;
 
-    const count = await prisma.mediaFile.count({
-      where: { businessProfileId: id },
-    });
-    if (count >= 12) {
-      return { ok: false, error: "الحد الأقصى 12 صورة لكل عمل" };
-    }
-
-    const created = await prisma.mediaFile.create({
-      data: {
-        businessProfileId: id,
-        uploadedById: session.user.id,
-        type: "IMAGE",
-        storageKey,
-        url,
-        width,
-        height,
-        mimeType,
-        fileSize,
-        status: "APPROVED",
-        displayOrder: count,
+    // Enforce the per-image cap and assign the next display order in a single
+    // serializable transaction. Counting + inserting in two separate calls
+    // lets two concurrent uploads both pass the cap check and produce 13
+    // rows; serializable isolation makes Postgres abort the loser instead.
+    const created = await prisma.$transaction(
+      async (tx) => {
+        const count = await tx.mediaFile.count({
+          where: { businessProfileId: id, type: "IMAGE" },
+        });
+        if (count >= 12) {
+          throw new Error("MAX_IMAGES");
+        }
+        const row = await tx.mediaFile.create({
+          data: {
+            businessProfileId: id,
+            uploadedById: session.user.id,
+            type: "IMAGE",
+            storageKey,
+            url,
+            width,
+            height,
+            mimeType,
+            fileSize,
+            status: "APPROVED",
+            displayOrder: count,
+          },
+        });
+        if (count === 0) {
+          await tx.businessProfile.update({
+            where: { id },
+            data: { coverImageId: row.id },
+          });
+        }
+        return row;
       },
+      { isolationLevel: "Serializable" },
+    ).catch((e: unknown) => {
+      if (e instanceof Error && e.message === "MAX_IMAGES") return null;
+      throw e;
     });
 
-    // First photo becomes the cover by default.
-    if (count === 0) {
-      await prisma.businessProfile.update({
-        where: { id },
-        data: { coverImageId: created.id },
-      });
+    if (!created) {
+      return { ok: false, error: "الحد الأقصى 12 صورة لكل عمل" };
     }
 
     await recordAudit({
@@ -547,6 +562,84 @@ export async function uploadPhotoAction(
       entityType: "MediaFile",
       entityId: created.id,
       after: { businessProfileId: id },
+    });
+
+    revalidatePath(`/dashboard/listings/${id}/edit/photos`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: errorMessage(e) };
+  }
+}
+
+/**
+ * Save an external video link (YouTube, Vimeo, or a direct .mp4/.webm). We
+ * only store the URL — the public profile renders an iframe / native player.
+ * Capped at 6 videos per listing so a single owner can't bloat the page.
+ */
+export async function addVideoAction(
+  id: string,
+  _prev: ActionResult | undefined,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const { session } = await loadOwnedListing(id);
+
+    const externalUrl = String(formData.get("externalUrl") ?? "").trim();
+    if (!externalUrl) {
+      return { ok: false, error: "يرجى لصق رابط الفيديو" };
+    }
+    const embed = detectVideoEmbed(externalUrl);
+    if (!embed) {
+      return {
+        ok: false,
+        error:
+          "الرابط غير مدعوم — استخدم رابط يوتيوب أو فيميو أو رابط ملف .mp4 / .webm مباشر",
+      };
+    }
+
+    // Same serializable-cap pattern as image upload — two concurrent
+    // submissions cannot both slip past the 6-video limit or collide on
+    // displayOrder.
+    const created = await prisma.$transaction(
+      async (tx) => {
+        const count = await tx.mediaFile.count({
+          where: { businessProfileId: id, type: "VIDEO" },
+        });
+        if (count >= 6) {
+          throw new Error("MAX_VIDEOS");
+        }
+        return tx.mediaFile.create({
+          data: {
+            businessProfileId: id,
+            uploadedById: session.user.id,
+            type: "VIDEO",
+            storageKey: externalUrl,
+            url: externalUrl,
+            status: "APPROVED",
+            displayOrder: count,
+          },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    ).catch((e: unknown) => {
+      if (e instanceof Error && e.message === "MAX_VIDEOS") return null;
+      throw e;
+    });
+
+    if (!created) {
+      return { ok: false, error: "الحد الأقصى 6 فيديوهات لكل عمل" };
+    }
+
+    await recordAudit({
+      actor: {
+        id: session.user.id,
+        email: session.user.email ?? null,
+        role: session.user.role,
+      },
+      action: "MEDIA_UPLOADED",
+      entityType: "MediaFile",
+      entityId: created.id,
+      after: { businessProfileId: id, kind: "VIDEO", provider: embed.provider },
     });
 
     revalidatePath(`/dashboard/listings/${id}/edit/photos`);

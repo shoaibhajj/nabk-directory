@@ -1,6 +1,5 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,10 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Phone,
   MapPin,
-  Clock,
   Star,
   Eye,
-  Share2,
   MessageCircle,
 } from "lucide-react";
 
@@ -29,6 +26,8 @@ import { getCommentsForBusiness } from "@/features/comments/queries";
 import { RatingStars } from "@/components/business/RatingStars";
 import { RatingSummary } from "@/components/business/RatingSummary";
 import { CommentSection } from "@/components/business/CommentSection";
+import { MediaGallery } from "@/components/business/MediaGallery";
+import { SocialLinks } from "@/components/business/SocialLinks";
 
 export default async function BusinessDetailPage({
   params,
@@ -72,8 +71,12 @@ export default async function BusinessDetailPage({
   const status = isOpenNow(business.workingHours);
   const phones = business.phoneNumbers;
   const whatsappPhone = phones.find((p) => p.label === "WHATSAPP")?.number ?? phones[0]?.number;
-  const images = business.mediaFiles.filter((m) => m.type === "IMAGE");
-  const cover = images[0];
+  const images = business.mediaFiles
+    .filter((m) => m.type === "IMAGE")
+    .map((m) => ({ id: m.id, url: m.url }));
+  const videos = business.mediaFiles
+    .filter((m) => m.type === "VIDEO")
+    .map((m) => ({ id: m.id, url: m.url }));
   const CategoryIcon = getCategoryIcon(business.category.slug);
   const initial = business.nameAr.replace(/^(ال|دكتور|د\.|عيادة|مطعم|كافيه|ورشة|سوبرماركت|صيدلية|مدرسة|محل)\s*/, "").trim().charAt(0)
     || business.nameAr.charAt(0);
@@ -83,28 +86,22 @@ export default async function BusinessDetailPage({
       <Header />
 
       <article className="container mx-auto px-4 py-8">
-        {/* Gradient hero with empty-state category icon when no cover image */}
-        {cover ? (
-          <div className="relative aspect-[16/6] w-full overflow-hidden rounded-3xl bg-muted">
-            <Image
-              src={cover.url}
-              alt={business.nameAr}
-              fill
-              className="object-cover"
-              sizes="100vw"
-            />
-          </div>
-        ) : (
-          <div
-            className="relative flex aspect-[16/6] w-full items-center justify-center overflow-hidden rounded-3xl"
-            style={{
-              background:
-                "linear-gradient(135deg, #E7F6E9 0%, #F4F0E6 45%, #FFE9C9 100%)",
-            }}
-          >
-            <CategoryIcon className="h-24 w-24 text-primary/30 md:h-32 md:w-32" />
-          </div>
-        )}
+        <MediaGallery
+          businessName={business.nameAr}
+          images={images}
+          videos={videos}
+          emptyHero={
+            <div
+              className="relative flex aspect-[16/6] w-full items-center justify-center overflow-hidden rounded-3xl"
+              style={{
+                background:
+                  "linear-gradient(135deg, #E7F6E9 0%, #F4F0E6 45%, #FFE9C9 100%)",
+              }}
+            >
+              <CategoryIcon className="h-24 w-24 text-primary/30 md:h-32 md:w-32" />
+            </div>
+          }
+        />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
@@ -132,6 +129,9 @@ export default async function BusinessDetailPage({
                   <Link href={`/category/${business.category.slug}`}>
                     <Badge variant="default">{business.category.nameAr}</Badge>
                   </Link>
+                  {business.subcategory && (
+                    <Badge variant="outline">{business.subcategory.nameAr}</Badge>
+                  )}
                   {business.ratingCount > 0 && (
                     <span className="inline-flex items-center gap-1">
                       <Star className="h-4 w-4 fill-[var(--color-star)] text-[var(--color-star)]" />
@@ -154,21 +154,6 @@ export default async function BusinessDetailPage({
                 </p>
               </CardContent>
             </Card>
-
-            {images.length > 1 && (
-              <Card className="mt-6">
-                <CardContent className="p-6">
-                  <h2 className="mb-4 text-xl font-bold">معرض الصور</h2>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                    {images.slice(1).map((m) => (
-                      <div key={m.id} className="relative aspect-square overflow-hidden rounded-xl bg-muted">
-                        <Image src={m.url} alt="" fill className="object-cover" sizes="33vw" />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             <Card id="ratings" className="mt-6 scroll-mt-24">
               <CardContent className="space-y-5 p-6">
@@ -246,6 +231,15 @@ export default async function BusinessDetailPage({
                 )}
               </CardContent>
             </Card>
+
+            {business.socialLinks.length > 0 && (
+              <Card>
+                <CardContent className="space-y-3 p-6">
+                  <h2 className="text-lg font-bold">حسابات التواصل</h2>
+                  <SocialLinks links={business.socialLinks} />
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardContent className="space-y-3 p-6">

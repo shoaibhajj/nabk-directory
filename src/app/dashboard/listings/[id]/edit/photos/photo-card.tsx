@@ -6,19 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
 import { removePhotoAction } from "@/features/businesses/mutations";
+import { VideoThumbnail } from "@/components/business/MediaGallery";
 
 interface PhotoCardProps {
   listingId: string;
   mediaId: string;
   url: string;
+  type: "IMAGE" | "VIDEO";
   isCover: boolean;
 }
 
-export function PhotoCard({ listingId, mediaId, url, isCover }: PhotoCardProps) {
+export function PhotoCard({
+  listingId,
+  mediaId,
+  url,
+  type,
+  isCover,
+}: PhotoCardProps) {
   const [pending, startTransition] = useTransition();
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-border bg-muted">
-      {url.startsWith("http") || url.startsWith("/") ? (
+      {type === "VIDEO" ? (
+        <VideoThumbnail url={url} />
+      ) : url.startsWith("http") || url.startsWith("/") ? (
         <Image
           src={url}
           alt="صورة العمل"
@@ -35,6 +45,9 @@ export function PhotoCard({ listingId, mediaId, url, isCover }: PhotoCardProps) 
       {isCover && (
         <Badge variant="accent" className="absolute right-2 top-2">الغلاف</Badge>
       )}
+      {type === "VIDEO" && (
+        <Badge variant="default" className="absolute right-2 top-2">فيديو</Badge>
+      )}
       <Button
         type="button"
         variant="destructive"
@@ -43,7 +56,7 @@ export function PhotoCard({ listingId, mediaId, url, isCover }: PhotoCardProps) 
         disabled={pending}
         className="absolute left-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
         onClick={() => {
-          if (!confirm("حذف هذه الصورة؟")) return;
+          if (!confirm(type === "VIDEO" ? "حذف هذا الفيديو؟" : "حذف هذه الصورة؟")) return;
           startTransition(async () => {
             await removePhotoAction(listingId, mediaId);
           });

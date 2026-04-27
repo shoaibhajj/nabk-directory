@@ -9,6 +9,7 @@ import type { BusinessProfile, Category, PhoneNumber, WorkingHours } from "@pris
 
 type CardData = BusinessProfile & {
   category: Category;
+  subcategory: Category | null;
   phoneNumbers: PhoneNumber[];
   workingHours: WorkingHours[];
 };
@@ -29,12 +30,16 @@ export function BusinessCard({ business }: { business: CardData }) {
             >
               {business.nameAr}
             </Link>
-            <Link
-              href={`/category/${business.category.slug}`}
-              className="mt-1 inline-flex"
-            >
-              <Badge variant="default">{business.category.nameAr}</Badge>
-            </Link>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Link href={`/category/${business.category.slug}`} className="inline-flex">
+                <Badge variant="default">{business.category.nameAr}</Badge>
+              </Link>
+              {business.subcategory && (
+                <Badge variant="outline" className="text-xs">
+                  {business.subcategory.nameAr}
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent">

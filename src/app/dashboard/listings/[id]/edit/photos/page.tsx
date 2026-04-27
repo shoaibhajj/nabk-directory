@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WizardStepper } from "@/components/business/WizardStepper";
 import { loadWizardListing, computeStepCompletion } from "@/features/businesses/wizard";
-import { PhotoUploadForm } from "./upload-form";
+import { PhotoUploadForm, VideoUploadForm } from "./upload-form";
 import { PhotoCard } from "./photo-card";
 import { SubmitButton } from "./submit-button";
 
@@ -21,16 +21,19 @@ export default async function PhotosStepPage({
   const completion = computeStepCompletion(data);
   const allDone = Object.values(completion).every(Boolean);
 
+  const images = data.mediaFiles.filter((m) => m.type === "IMAGE");
+  const videos = data.mediaFiles.filter((m) => m.type === "VIDEO");
+
   return (
     <div className="space-y-6">
       <WizardStepper listingId={id} current="photos" completed={completion} />
 
       <Card>
         <CardContent className="space-y-2 p-6">
-          <h2 className="text-xl font-bold">الخطوة 5 — الصور</h2>
+          <h2 className="text-xl font-bold">الخطوة 5 — الصور والفيديوهات</h2>
           <p className="text-sm text-muted-foreground">
             ارفع صور العمل (الواجهة، المنتجات، فريق العمل). أول صورة ستكون
-            صورة الغلاف. يمكنك إضافة حتى 12 صورة.
+            صورة الغلاف. يمكنك إضافة حتى 12 صورة و 6 فيديوهات.
           </p>
         </CardContent>
       </Card>
@@ -39,18 +42,47 @@ export default async function PhotosStepPage({
 
       <Card>
         <CardContent className="space-y-3 p-6">
-          <h3 className="text-base font-bold">الصور الحالية ({data.mediaFiles.length})</h3>
-          {data.mediaFiles.length === 0 ? (
+          <h3 className="text-base font-bold">
+            الصور الحالية ({images.length})
+          </h3>
+          {images.length === 0 ? (
             <p className="text-sm text-muted-foreground">لم تُضف أي صورة بعد.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-              {data.mediaFiles.map((m, idx) => (
+              {images.map((m, idx) => (
                 <PhotoCard
                   key={m.id}
                   listingId={id}
                   mediaId={m.id}
                   url={m.url}
+                  type="IMAGE"
                   isCover={idx === 0}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <VideoUploadForm id={id} />
+
+      <Card>
+        <CardContent className="space-y-3 p-6">
+          <h3 className="text-base font-bold">
+            الفيديوهات الحالية ({videos.length})
+          </h3>
+          {videos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">لم يُضف أي فيديو بعد.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {videos.map((m) => (
+                <PhotoCard
+                  key={m.id}
+                  listingId={id}
+                  mediaId={m.id}
+                  url={m.url}
+                  type="VIDEO"
+                  isCover={false}
                 />
               ))}
             </div>
@@ -87,4 +119,3 @@ export default async function PhotosStepPage({
     </div>
   );
 }
-
