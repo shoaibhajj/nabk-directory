@@ -56,6 +56,31 @@ prisma/
   seed.ts         # demo data
 ```
 
+## End-to-end tests
+
+Playwright drives the rating widget and comment form through the public
+Replit dev domain, so the same `next.config.ts` `allowedOrigins` /
+`allowedDevOrigins` settings that previously broke star clicks are exercised.
+
+```bash
+# one-time browser download
+pnpm --filter @workspace/nabk-directory test:e2e:install
+# run against the live dev workflow (auto-detects $REPLIT_DEV_DOMAIN
+# inside the Replit workspace)
+pnpm --filter @workspace/nabk-directory test:e2e
+```
+
+The runner refuses to fall back to `localhost`: it requires either
+`REPLIT_DEV_DOMAIN` (set automatically inside the workspace) or an
+explicit override, e.g.
+`E2E_BASE_URL=https://your-host pnpm --filter @workspace/nabk-directory test:e2e`.
+This guarantees the suite always exercises the proxied multi-segment
+hostname that the original star-click regression depended on.
+
+The global setup upserts `e2e-tester@nabk.local` (back-dated past the
+new-account comment-moderation window) and picks any active business
+that the test user does not own.
+
 ## Notes / status
 
 - Browsing flow (homepage, category, detail), search, ratings display, working
