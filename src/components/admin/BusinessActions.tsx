@@ -10,7 +10,7 @@ import {
   adminRestoreBusinessAction,
 } from "@/features/admin/businesses-actions";
 
-type Status = "DRAFT" | "ACTIVE" | "SUSPENDED";
+type Status = "DRAFT" | "PENDING" | "ACTIVE" | "SUSPENDED" | "REJECTED";
 
 export function BusinessActions({
   businessId,

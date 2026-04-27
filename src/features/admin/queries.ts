@@ -35,8 +35,10 @@ export async function getAdminBusinessCounts() {
   });
   const counts: Record<BusinessStatus | "ALL", number> = {
     DRAFT: 0,
+    PENDING: 0,
     ACTIVE: 0,
     SUSPENDED: 0,
+    REJECTED: 0,
     ALL: 0,
   };
   for (const r of rows) {
