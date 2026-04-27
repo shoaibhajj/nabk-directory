@@ -23,8 +23,14 @@ args = ["pnpm", "--filter", "@workspace/nabk-directory", "run", "build"]
 [services.production.build.env]
 NODE_ENV = "production"
 
+# NOTE: production cwd is the workspace root (`/home/runner/workspace`),
+# NOT the artifact dir. The standalone bundle lives inside the artifact at
+# `artifacts/nabk-directory/.next/standalone/artifacts/nabk-directory/`
+# (the second nested `artifacts/nabk-directory` is from `outputFileTracingRoot`
+# pointing at the monorepo root in `next.config.ts`). Path must therefore be
+# fully qualified from the workspace root.
 [services.production.run]
-args = ["node", ".next/standalone/artifacts/nabk-directory/server.js"]
+args = ["node", "artifacts/nabk-directory/.next/standalone/artifacts/nabk-directory/server.js"]
 
 [services.production.run.env]
 PORT = "5000"

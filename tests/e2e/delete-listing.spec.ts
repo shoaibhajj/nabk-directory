@@ -39,7 +39,7 @@ async function seedOwnedListing(opts: { ownerId: string; nameAr: string }) {
       status: "ACTIVE",
       publishedAt: new Date(),
     },
-    select: { id: true, nameAr: true },
+    select: { id: true, nameAr: true, slug: true },
   });
 }
 
@@ -68,7 +68,7 @@ test.describe("Owner deletes their own listing", () => {
 
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     const card = page
-      .locator(`a[href="/businesses/${seeded.id}"]`)
+      .locator(`a[href="/businesses/${seeded.slug}"]`)
       .first()
       .locator("xpath=ancestor::*[contains(@class,'space-y-3')][1]");
     await expect(card.getByText(nameAr).first()).toBeVisible();
@@ -85,12 +85,12 @@ test.describe("Owner deletes their own listing", () => {
 
     // (a) The listing disappears from the dashboard.
     await expect(card).toBeHidden({ timeout: 20_000 });
-    await expect(page.locator(`a[href="/businesses/${seeded.id}"]`)).toHaveCount(
+    await expect(page.locator(`a[href="/businesses/${seeded.slug}"]`)).toHaveCount(
       0,
     );
 
     // (b) The public detail URL now 404s.
-    const detailResponse = await page.goto(`/businesses/${seeded.id}`, {
+    const detailResponse = await page.goto(`/businesses/${seeded.slug}`, {
       waitUntil: "domcontentloaded",
     });
     expect(detailResponse?.status()).toBe(404);
@@ -128,7 +128,7 @@ test.describe("Owner deletes their own listing", () => {
     });
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     const revivedCard = page
-      .locator(`a[href="/businesses/${seeded.id}"]`)
+      .locator(`a[href="/businesses/${seeded.slug}"]`)
       .first()
       .locator("xpath=ancestor::*[contains(@class,'space-y-3')][1]");
     await expect(revivedCard.getByText(nameAr).first()).toBeVisible();
@@ -208,11 +208,11 @@ test.describe("Owner deletes their own listing", () => {
     // The dashboard never renders the foreign listing for the wrong owner.
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(
-      page.locator(`a[href="/businesses/${state.business.id}"]`),
+      page.locator(`a[href="/businesses/${state.business.slug}"]`),
     ).toHaveCount(0);
 
     const decoyCard = page
-      .locator(`a[href="/businesses/${decoy.id}"]`)
+      .locator(`a[href="/businesses/${decoy.slug}"]`)
       .first()
       .locator("xpath=ancestor::*[contains(@class,'space-y-3')][1]");
     await decoyCard.getByText(decoyName).first().waitFor();

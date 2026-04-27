@@ -24,7 +24,7 @@ export function BusinessCard({ business }: { business: CardData }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <Link
-              href={`/businesses/${business.id}`}
+              href={`/businesses/${business.slug}`}
               className="text-lg font-bold text-foreground hover:text-accent line-clamp-1"
             >
               {business.nameAr}
@@ -83,7 +83,7 @@ export function BusinessCard({ business }: { business: CardData }) {
         </div>
 
         <div className="mt-auto pt-3">
-          <Link href={`/businesses/${business.id}`} className="block">
+          <Link href={`/businesses/${business.slug}`} className="block">
             <Button variant="accent" size="sm" className="w-full">
               التفاصيل
             </Button>

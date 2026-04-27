@@ -127,13 +127,13 @@ export async function adminApproveBusinessAction(
       html: listingApprovedHtml(
         business.owner.name,
         business.nameAr,
-        `${base}/businesses/${business.id}`,
+        `${base}/businesses/${business.slug}`,
       ),
     });
   }
 
   revalidatePath("/admin/businesses");
-  revalidatePath(`/businesses/${business.id}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -233,7 +233,7 @@ export async function adminRejectBusinessAction(
   }
 
   revalidatePath("/admin/businesses");
-  revalidatePath(`/businesses/${business.id}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -298,6 +298,6 @@ export async function adminRestoreBusinessAction(
   });
 
   revalidatePath("/admin/businesses");
-  revalidatePath(`/businesses/${business.id}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }

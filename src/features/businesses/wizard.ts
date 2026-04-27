@@ -69,7 +69,9 @@ export function computeStepCompletion(
   data: WizardListingData,
 ): Record<WizardStepKey, boolean> {
   return {
-    basics: Boolean(data.nameAr && data.nameAr !== "عمل جديد"),
+    basics: Boolean(
+      data.nameAr && data.nameAr !== "عمل جديد" && data.nameEn && data.nameEn.trim(),
+    ),
     category: Boolean(data.categoryId && data.cityId),
     contact: data.phoneNumbers.length > 0,
     hours: data.workingHours.length > 0,

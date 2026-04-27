@@ -106,7 +106,7 @@ export async function postCommentAction(
     },
   });
 
-  revalidatePath(`/businesses/${business.id}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -156,7 +156,7 @@ export async function deleteOwnCommentAction(
     before: { businessProfileId: comment.businessProfileId },
   });
 
-  revalidatePath(`/businesses/${comment.businessProfileId}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -213,7 +213,7 @@ export async function adminApproveCommentAction(
     after: { status: "VISIBLE" },
   });
 
-  revalidatePath(`/businesses/${comment.businessProfileId}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -262,6 +262,6 @@ export async function adminHideCommentAction(
     after: { status: "HIDDEN_BY_ADMIN", hiddenReason: parsed.data.reason },
   });
 
-  revalidatePath(`/businesses/${comment.businessProfileId}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }

@@ -122,7 +122,7 @@ export async function submitRatingAction(
     after: { score: parsed.data.score, businessProfileId: business.id },
   });
 
-  revalidatePath(`/businesses/${business.id}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -186,7 +186,7 @@ export async function deleteOwnRatingAction(
         : { businessProfileId: businessId },
   });
 
-  revalidatePath(`/businesses/${businessId}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
 
@@ -232,6 +232,6 @@ export async function adminDeleteRatingAction(
     before: { score: rating.score, userId: rating.userId },
   });
 
-  revalidatePath(`/businesses/${rating.businessProfileId}`);
+  revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }

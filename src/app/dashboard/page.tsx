@@ -51,7 +51,7 @@ export default async function DashboardPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <Link
-                          href={`/businesses/${b.id}`}
+                          href={`/businesses/${b.slug}`}
                           className="block truncate text-lg font-bold hover:text-accent"
                         >
                           {b.nameAr}
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
                         <Button variant="outline" size="sm">تعديل</Button>
                       </Link>
                       {b.status === "ACTIVE" && (
-                        <Link href={`/businesses/${b.id}`}>
+                        <Link href={`/businesses/${b.slug}`}>
                           <Button variant="ghost" size="sm">عرض</Button>
                         </Link>
                       )}

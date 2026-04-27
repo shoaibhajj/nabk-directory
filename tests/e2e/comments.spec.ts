@@ -8,7 +8,7 @@ test.describe("Comment form on the public dev domain", () => {
     const state = loadState();
     await signIn(page, state.user);
 
-    await page.goto(`/businesses/${state.business.id}#comments`, {
+    await page.goto(`/businesses/${state.business.slug}#comments`, {
       waitUntil: "domcontentloaded",
     });
 

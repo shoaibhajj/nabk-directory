@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueListingSlug } from "@/lib/slug";
 import { recordAudit } from "@/lib/audit";
-import { uploadImage } from "@/lib/storage";
 import {
   type PhoneLabel,
   type SocialPlatform,
@@ -114,12 +113,18 @@ export async function createDraftListingAction(): Promise<void> {
 
 const basicsSchema = z.object({
   nameAr: z.string().trim().min(2, "اسم العمل قصير جداً").max(120),
+  // nameEn is REQUIRED — it is the source of the public slug
+  // (`/businesses/<slug>`). Latin characters only so the slug is
+  // URL-safe; users get a clear error if they try Arabic here.
   nameEn: z
     .string()
     .trim()
+    .min(2, "الاسم الإنكليزي مطلوب لإنشاء رابط الصفحة")
     .max(120)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+    .regex(
+      /^[A-Za-z0-9][A-Za-z0-9\s.,'&\-]+$/,
+      "استخدم حروفاً لاتينية وأرقاماً فقط في الاسم الإنكليزي",
+    ),
   descriptionAr: z
     .string()
     .trim()
@@ -152,8 +157,10 @@ export async function saveBasicsAction(
     }
     const data = parsed.data;
 
-    // Refresh slug only if the listing is still a draft and the English name
-    // changed meaningfully. Active listings keep their public slug stable.
+    // The public slug comes from nameEn. We refresh it whenever nameEn
+    // changes AND the listing is still DRAFT (so we don't break links to
+    // already-published pages). Once the listing goes ACTIVE the slug is
+    // frozen — admins can rename later via a dedicated tool if needed.
     const before = await prisma.businessProfile.findUnique({
       where: { id },
       select: { slug: true, nameAr: true, nameEn: true, status: true },
@@ -161,8 +168,7 @@ export async function saveBasicsAction(
     let slug = before!.slug;
     if (
       listing.status === "DRAFT" &&
-      (before!.nameEn !== data.nameEn || before!.nameAr !== data.nameAr) &&
-      before!.slug.startsWith("listing-")
+      before!.nameEn !== data.nameEn
     ) {
       slug = await generateUniqueListingSlug(data.nameEn, data.nameAr, id);
     }
@@ -476,45 +482,29 @@ export async function uploadPhotoAction(
   try {
     const { session } = await loadOwnedListing(id);
 
-    const file = formData.get("photo");
+    // Direct file uploads need cloud storage which isn't wired up yet
+    // (the previous stub silently returned `/placeholder.svg`, leaving owners
+    // with broken images). For now we accept only public image URLs; once
+    // object storage is provisioned we'll re-enable the file branch.
     const externalUrl = String(formData.get("externalUrl") ?? "").trim();
 
-    let storageKey = "";
-    let url = "";
-    let width: number | undefined;
-    let height: number | undefined;
-    let mimeType: string | undefined;
-    let fileSize: number | undefined;
-
-    if (file instanceof File && file.size > 0) {
-      if (file.size > 8 * 1024 * 1024) {
-        return { ok: false, error: "حجم الصورة يتجاوز 8MB" };
-      }
-      if (!file.type.startsWith("image/")) {
-        return { ok: false, error: "يُرجى رفع صورة فقط" };
-      }
-      const buf = Buffer.from(await file.arrayBuffer());
-      const result = await uploadImage(buf, file.name);
-      storageKey = result.storageKey;
-      url = result.url;
-      width = result.width;
-      height = result.height;
-      mimeType = file.type;
-      fileSize = file.size;
-    } else if (externalUrl) {
-      try {
-        const parsedUrl = new URL(externalUrl);
-        if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-          return { ok: false, error: "رابط الصورة يجب أن يبدأ بـ https" };
-        }
-      } catch {
-        return { ok: false, error: "رابط الصورة غير صحيح" };
-      }
-      storageKey = externalUrl;
-      url = externalUrl;
-    } else {
-      return { ok: false, error: "يرجى اختيار صورة أو لصق رابط" };
+    if (!externalUrl) {
+      return { ok: false, error: "يرجى لصق رابط صورة" };
     }
+    try {
+      const parsedUrl = new URL(externalUrl);
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        return { ok: false, error: "رابط الصورة يجب أن يبدأ بـ https" };
+      }
+    } catch {
+      return { ok: false, error: "رابط الصورة غير صحيح" };
+    }
+    const storageKey = externalUrl;
+    const url = externalUrl;
+    const width: number | undefined = undefined;
+    const height: number | undefined = undefined;
+    const mimeType: string | undefined = undefined;
+    const fileSize: number | undefined = undefined;
 
     const count = await prisma.mediaFile.count({
       where: { businessProfileId: id },
@@ -680,7 +670,7 @@ export async function softDeleteListingAction(
 
     revalidatePath("/dashboard");
     revalidatePath("/businesses");
-    revalidatePath(`/businesses/${id}`);
+    revalidatePath("/businesses/[slug]", "page");
     revalidatePath("/categories");
     revalidatePath("/admin/moderation");
     revalidatePath("/admin/businesses");
@@ -714,6 +704,12 @@ export async function submitForReviewAction(id: string): Promise<ActionResult> {
     if (!full) return { ok: false, error: "العمل غير موجود" };
     if (!full.nameAr || full.nameAr === "عمل جديد") {
       return { ok: false, error: "يرجى تحديد اسم العمل (الخطوة 1)" };
+    }
+    if (!full.nameEn || !full.nameEn.trim()) {
+      return {
+        ok: false,
+        error: "يرجى إضافة الاسم بالإنجليزية لإنشاء رابط مناسب (الخطوة 1)",
+      };
     }
     if (!full.categoryId || !full.cityId) {
       return { ok: false, error: "يرجى تحديد التصنيف والمدينة (الخطوة 2)" };
@@ -797,7 +793,7 @@ export async function approveListingAction(id: string): Promise<ActionResult> {
     });
     revalidatePath("/admin/moderation");
     revalidatePath("/businesses");
-    revalidatePath(`/businesses/${id}`);
+    revalidatePath("/businesses/[slug]", "page");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: errorMessage(e) };

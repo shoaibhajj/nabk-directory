@@ -10,12 +10,13 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   images: {
+    // Owners paste arbitrary public image URLs into their listings (gstatic
+    // thumbnails, social CDNs, blog posts, etc.). Allow any HTTPS host so
+    // <Image> doesn't error on the detail page; widen later only if SSRF
+    // becomes a concern.
     remotePatterns: [
-      { protocol: "https", hostname: "**.replit.app" },
-      { protocol: "https", hostname: "**.replit.dev" },
-      { protocol: "https", hostname: "lh3.googleusercontent.com" },
-      { protocol: "https", hostname: "storage.googleapis.com" },
-      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "**" },
+      { protocol: "http", hostname: "**" },
     ],
   },
   experimental: {

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { getCategoryIcon } from "@/components/business/category-icons";
-import { getBusinessById } from "@/features/businesses/queries";
+import { getBusinessBySlugOrId } from "@/features/businesses/queries";
 import { isOpenNow, DAY_NAMES_AR } from "@/lib/working-hours";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
@@ -34,20 +34,28 @@ export default async function BusinessDetailPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
   searchParams: Promise<{ commentsPage?: string }>;
 }) {
-  const { id } = await params;
+  const { slug } = await params;
   const sp = await searchParams;
-  const business = await getBusinessById(id);
-  if (!business) notFound();
+  const lookup = await getBusinessBySlugOrId(slug);
+  if (!lookup) notFound();
+  // Old `/businesses/<cuid>` links are matched by id and 308'd to the
+  // canonical slug URL so existing bookmarks, share-cards, and search engines
+  // converge on a single permalink. `permanentRedirect` issues HTTP 308 so
+  // method+body are preserved and the redirect is cacheable by intermediaries.
+  if (lookup.matchedBy === "id") {
+    permanentRedirect(`/businesses/${lookup.business.slug}`);
+  }
+  const business = lookup.business;
 
   const session = await auth();
   const viewerId = session?.user?.id ?? null;
   const isAdmin =
     session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN";
   const ownsBusiness = viewerId !== null && business.owner?.id === viewerId;
-  const signInHref = `/sign-in?callbackUrl=/businesses/${business.id}`;
+  const signInHref = `/sign-in?callbackUrl=/businesses/${business.slug}`;
 
   const commentsPage = Math.max(1, Number.parseInt(sp.commentsPage ?? "1", 10) || 1);
   const [myRating, distribution, comments] = await Promise.all([
@@ -58,7 +66,7 @@ export default async function BusinessDetailPage({
 
   // Increment view (non-blocking, ok to await briefly)
   await prisma.businessProfile
-    .update({ where: { id }, data: { viewCount: { increment: 1 } } })
+    .update({ where: { id: business.id }, data: { viewCount: { increment: 1 } } })
     .catch(() => null);
 
   const status = isOpenNow(business.workingHours);
@@ -287,11 +295,12 @@ export default async function BusinessDetailPage({
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { id } = await params;
-  const business = await getBusinessById(id);
-  if (!business) return {};
+  const { slug } = await params;
+  const lookup = await getBusinessBySlugOrId(slug);
+  if (!lookup) return {};
+  const business = lookup.business;
   return {
     title: `${business.nameAr} — دليل النبك`,
     description: business.descriptionAr ?? `${business.nameAr} في النبك`,

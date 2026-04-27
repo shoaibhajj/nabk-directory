@@ -43,14 +43,20 @@ export function BasicsForm({ id, action, initial }: BasicsFormProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="nameEn">اسم العمل (إنكليزي) — اختياري</Label>
+              <Label htmlFor="nameEn">اسم العمل (إنكليزي) *</Label>
               <Input
                 id="nameEn"
                 name="nameEn"
+                required
+                minLength={2}
+                pattern="[A-Za-z0-9][A-Za-z0-9\s.,'&\-]+"
                 defaultValue={initial.nameEn}
                 placeholder="Al-Shifa Pharmacy"
                 dir="ltr"
               />
+              <p className="text-xs text-muted-foreground">
+                يُستخدم لإنشاء رابط الصفحة (مثال: /businesses/al-shifa-pharmacy)
+              </p>
             </div>
           </div>
 

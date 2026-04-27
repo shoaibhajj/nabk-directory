@@ -78,7 +78,7 @@ export default async function AdminBusinessesPage({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <Link
-                      href={`/businesses/${b.id}`}
+                      href={`/businesses/${b.slug}`}
                       className="text-lg font-bold hover:text-accent"
                     >
                       {b.nameAr}

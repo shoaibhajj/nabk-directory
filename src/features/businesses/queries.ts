@@ -43,22 +43,51 @@ export async function getActiveBusinesses(opts?: {
   });
 }
 
-export async function getBusinessById(id: string) {
+const businessDetailInclude = {
+  category: true,
+  city: true,
+  owner: { select: { id: true, name: true } },
+  phoneNumbers: { orderBy: { displayOrder: "asc" } },
+  workingHours: { orderBy: { dayOfWeek: "asc" } },
+  socialLinks: true,
+  mediaFiles: {
+    where: { status: "APPROVED" },
+    orderBy: { displayOrder: "asc" },
+  },
+} satisfies Prisma.BusinessProfileInclude;
+
+export type BusinessDetail = Prisma.BusinessProfileGetPayload<{
+  include: typeof businessDetailInclude;
+}>;
+
+export async function getBusinessById(id: string): Promise<BusinessDetail | null> {
   return prisma.businessProfile.findFirst({
     where: { id, status: "ACTIVE", deletedAt: null },
-    include: {
-      category: true,
-      city: true,
-      owner: { select: { id: true, name: true } },
-      phoneNumbers: { orderBy: { displayOrder: "asc" } },
-      workingHours: { orderBy: { dayOfWeek: "asc" } },
-      socialLinks: true,
-      mediaFiles: {
-        where: { status: "APPROVED" },
-        orderBy: { displayOrder: "asc" },
-      },
-    },
+    include: businessDetailInclude,
   });
+}
+
+/**
+ * Resolve a business by its public slug, with a fallback to its cuid id so
+ * old `/businesses/<id>` permalinks keep working. Returns `matchedBy` so the
+ * caller can 308-redirect id matches to the canonical slug URL.
+ */
+export async function getBusinessBySlugOrId(
+  slugOrId: string,
+): Promise<{ business: BusinessDetail; matchedBy: "slug" | "id" } | null> {
+  const bySlug = await prisma.businessProfile.findFirst({
+    where: { slug: slugOrId, status: "ACTIVE", deletedAt: null },
+    include: businessDetailInclude,
+  });
+  if (bySlug) return { business: bySlug, matchedBy: "slug" };
+
+  const byId = await prisma.businessProfile.findFirst({
+    where: { id: slugOrId, status: "ACTIVE", deletedAt: null },
+    include: businessDetailInclude,
+  });
+  if (byId) return { business: byId, matchedBy: "id" };
+
+  return null;
 }
 
 export async function getStats() {

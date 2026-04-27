@@ -8,7 +8,7 @@ test.describe("Rating widget on the public dev domain", () => {
     const state = loadState();
     await signIn(page, state.user);
 
-    await page.goto(`/businesses/${state.business.id}#ratings`, {
+    await page.goto(`/businesses/${state.business.slug}#ratings`, {
       waitUntil: "domcontentloaded",
     });
 

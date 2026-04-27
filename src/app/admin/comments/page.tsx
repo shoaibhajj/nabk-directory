@@ -104,7 +104,7 @@ export default async function AdminCommentsPage({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    href={`/businesses/${c.business.id}`}
+                    href={`/businesses/${c.business.slug}`}
                     className="text-sm font-semibold hover:text-accent"
                   >
                     على «{c.business.nameAr}»

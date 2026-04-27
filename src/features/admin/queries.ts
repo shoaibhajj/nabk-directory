@@ -1,7 +1,66 @@
-import type { BusinessStatus, CommentStatus, Prisma } from "@prisma/client";
+import type {
+  BusinessStatus,
+  CommentStatus,
+  Prisma,
+  Role,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const ADMIN_PAGE_SIZE = 20;
+const ADMIN_USERS_PAGE_SIZE = 30;
+
+export async function getAdminUsers(
+  filter: { role?: Role | "ALL"; q?: string; page?: number },
+) {
+  const page = Math.max(1, filter.page ?? 1);
+  const skip = (page - 1) * ADMIN_USERS_PAGE_SIZE;
+  const where: Prisma.UserWhereInput = { deletedAt: null };
+  if (filter.role && filter.role !== "ALL") where.role = filter.role;
+  if (filter.q && filter.q.trim()) {
+    const q = filter.q.trim();
+    where.OR = [
+      { email: { contains: q, mode: "insensitive" } },
+      { name: { contains: q, mode: "insensitive" } },
+    ];
+  }
+  const [items, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      take: ADMIN_USERS_PAGE_SIZE,
+      skip,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        emailVerified: true,
+        createdAt: true,
+        _count: { select: { businessProfiles: true } },
+      },
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return { items, total, page, pageSize: ADMIN_USERS_PAGE_SIZE };
+}
+
+export async function getAdminCategories() {
+  const items = await prisma.category.findMany({
+    orderBy: [{ parentId: "asc" }, { displayOrder: "asc" }, { nameAr: "asc" }],
+    select: {
+      id: true,
+      nameAr: true,
+      nameEn: true,
+      slug: true,
+      icon: true,
+      parentId: true,
+      displayOrder: true,
+      isActive: true,
+      _count: { select: { listings: true, children: true } },
+    },
+  });
+  return items;
+}
 
 export async function getAdminBusinesses(
   status: BusinessStatus | "ALL",
@@ -61,7 +120,7 @@ export async function getAdminComments(
       where,
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
-        business: { select: { id: true, nameAr: true } },
+        business: { select: { id: true, nameAr: true, slug: true } },
       },
       orderBy: { createdAt: "desc" },
       take: ADMIN_PAGE_SIZE,
