@@ -13,8 +13,12 @@ run = "pnpm exec next dev --port 5000 --hostname 0.0.0.0"
 
 [services.production]
 
+# Use the package script (not `pnpm exec next build` directly) so the
+# post-build assemble-standalone step runs and copies `.next/static` and
+# `public/` into the standalone bundle. Without this, every static asset
+# 404s in production.
 [services.production.build]
-args = ["pnpm", "exec", "next", "build"]
+args = ["pnpm", "--filter", "@workspace/nabk-directory", "run", "build"]
 
 [services.production.build.env]
 NODE_ENV = "production"
