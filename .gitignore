@@ -9,3 +9,9 @@ build
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright e2e
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/tests/e2e/.state/
