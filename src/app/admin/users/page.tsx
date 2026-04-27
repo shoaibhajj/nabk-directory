@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserRoleSelect } from "@/components/admin/UserRoleSelect";
+import { UserVerifyActions } from "@/components/admin/UserVerifyActions";
 import { getAdminUsers } from "@/features/admin/queries";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -150,12 +151,17 @@ export default async function AdminUsersPage({
                     </div>
                   </div>
 
-                  <UserRoleSelect
-                    userId={u.id}
-                    currentRole={u.role}
-                    disabled={isSelf}
-                    disabledReason={isSelf ? "لا يمكن تعديل دورك" : undefined}
-                  />
+                  <div className="flex flex-col items-end gap-2">
+                    <UserRoleSelect
+                      userId={u.id}
+                      currentRole={u.role}
+                      disabled={isSelf}
+                      disabledReason={isSelf ? "لا يمكن تعديل دورك" : undefined}
+                    />
+                    {!u.emailVerified && !isSelf && (
+                      <UserVerifyActions userId={u.id} />
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );

@@ -37,6 +37,8 @@ export function Footer() {
               <li><Link href="/businesses" className="hover:text-accent">جميع الأعمال</Link></li>
               <li><Link href="/sign-up" className="hover:text-accent">إنشاء حساب</Link></li>
               <li><Link href="/dashboard/listings/new" className="hover:text-accent">أضف عملك</Link></li>
+              <li><Link href="/about" className="hover:text-accent">عن الدليل</Link></li>
+              <li><Link href="/contact" className="hover:text-accent">تواصل معنا</Link></li>
             </ul>
           </div>
         </div>

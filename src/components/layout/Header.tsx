@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Store, Info } from "lucide-react";
+import { Store, Info, Mail } from "lucide-react";
 
 export async function Header() {
   const session = await auth();
@@ -32,6 +32,9 @@ export async function Header() {
           </Link>
           <Link href="/about" className="inline-flex items-center gap-1 text-sm font-semibold hover:text-accent">
             <Info className="h-4 w-4" /> عن الدليل
+          </Link>
+          <Link href="/contact" className="inline-flex items-center gap-1 text-sm font-semibold hover:text-accent">
+            <Mail className="h-4 w-4" /> تواصل
           </Link>
         </nav>
 

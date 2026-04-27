@@ -88,6 +88,55 @@ export function listingSuspendedHtml(
   `;
 }
 
+export function emailVerifiedByAdminHtml(name: string, link: string) {
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">دليل النبك</h2>
+      <p>مرحباً ${name},</p>
+      <p>قام أحد المسؤولين بتفعيل حسابك يدوياً. يمكنك الآن تسجيل الدخول واستخدام كل ميزات الدليل.</p>
+      <p><a href="${link}" style="background:#1A664D;color:#fff;padding:12px 24px;border-radius:9999px;text-decoration:none">فتح الموقع</a></p>
+    </div>
+  `;
+}
+
+export function contactReceivedAdminHtml(opts: {
+  name: string;
+  email: string;
+  subject: string | null;
+  message: string;
+  link: string;
+}) {
+  // All untrusted fields go through escapeHtml — Resend renders raw HTML and
+  // a guest-supplied <script> would otherwise execute in any admin webmail
+  // client that previews the body.
+  const safe = {
+    name: escapeHtml(opts.name),
+    email: escapeHtml(opts.email),
+    subject: escapeHtml(opts.subject ?? "(بدون موضوع)"),
+    message: escapeHtml(opts.message).replace(/\n/g, "<br/>"),
+    link: opts.link,
+  };
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">رسالة جديدة من نموذج التواصل</h2>
+      <p><strong>الاسم:</strong> ${safe.name}</p>
+      <p><strong>البريد:</strong> <span dir="ltr">${safe.email}</span></p>
+      <p><strong>الموضوع:</strong> ${safe.subject}</p>
+      <div style="background:#fff;border:1px solid #E5DFD7;padding:12px;border-radius:8px;white-space:pre-wrap">${safe.message}</div>
+      <p style="margin-top:16px"><a href="${safe.link}" style="background:#F2930D;color:#fff;padding:10px 20px;border-radius:9999px;text-decoration:none">فتح الرسالة في لوحة الإدارة</a></p>
+    </div>
+  `;
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function passwordResetHtml(name: string, link: string) {
   return `
     <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">

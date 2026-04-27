@@ -65,10 +65,21 @@ enum CommentStatus {
   DELETED_BY_USER
 }
 
+enum ContactMessageStatus {
+  NEW
+  READ
+  RESOLVED
+  SPAM
+}
+
 enum AuditAction {
   USER_CREATED
   USER_ROLE_CHANGED
+  USER_EMAIL_VERIFIED_BY_ADMIN
+  USER_VERIFICATION_RESENT
   USER_DELETED
+  CONTACT_MESSAGE_RECEIVED
+  CONTACT_MESSAGE_UPDATED
   LISTING_CREATED
   LISTING_UPDATED
   LISTING_SUBMITTED
@@ -121,6 +132,7 @@ model User {
   categorySuggestions     CategorySuggestion[]
   ratings                 Rating[]
   comments                Comment[]
+  contactMessages         ContactMessage[]
 
   @@map("users")
 }
@@ -414,4 +426,27 @@ model PlatformSetting {
   updatedAt   DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+// Public "contact us / help" inbox. Anyone (including unauthenticated
+// guests) can submit a message; admins read and resolve them. We keep
+// hashed IP and a short user-agent string for abuse triage but never
+// expose them publicly.
+model ContactMessage {
+  id        String               @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String               @db.Text
+  status    ContactMessageStatus @default(NEW)
+  ipHash    String?
+  userAgent String?
+  userId    String?
+  user      User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("contact_messages")
 }

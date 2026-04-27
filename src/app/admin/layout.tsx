@@ -10,6 +10,7 @@ const NAV: NavItem[] = [
   { href: "/admin", label: "نظرة عامة" },
   { href: "/admin/businesses", label: "الأعمال" },
   { href: "/admin/comments", label: "التعليقات" },
+  { href: "/admin/contact-messages", label: "رسائل التواصل" },
   { href: "/admin/categories", label: "التصنيفات" },
   { href: "/admin/users", label: "المستخدمون", superAdminOnly: true },
   { href: "/admin/audit", label: "سجل التدقيق" },
