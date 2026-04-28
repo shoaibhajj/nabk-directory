@@ -8,6 +8,12 @@ import { prisma } from "@/lib/prisma";
 import { generateUniqueListingSlug } from "@/lib/slug";
 import { recordAudit } from "@/lib/audit";
 import { detectVideoEmbed } from "@/lib/video";
+import { createNotification } from "@/lib/notifications";
+import {
+  sendEmail,
+  listingApprovedHtml,
+  listingRejectedHtml,
+} from "@/lib/email";
 import {
   type PhoneLabel,
   type SocialPlatform,
@@ -864,7 +870,13 @@ export async function approveListingAction(id: string): Promise<ActionResult> {
     const session = await requireAdmin();
     const before = await prisma.businessProfile.findUnique({
       where: { id },
-      select: { status: true },
+      select: {
+        id: true,
+        status: true,
+        nameAr: true,
+        slug: true,
+        owner: { select: { id: true, name: true, email: true } },
+      },
     });
     if (!before) return { ok: false, error: "العمل غير موجود" };
 
@@ -881,9 +893,37 @@ export async function approveListingAction(id: string): Promise<ActionResult> {
       action: "LISTING_APPROVED",
       entityType: "BusinessProfile",
       entityId: id,
-      before,
+      before: { status: before.status },
       after: { status: "ACTIVE" },
     });
+
+    // Owner-facing notification + email. Both are best-effort: failures here
+    // must not roll back the approval (which has already committed).
+    await createNotification({
+      userId: before.owner.id,
+      type: "LISTING_APPROVED",
+      titleAr: "تم اعتماد عملك",
+      messageAr: `تم نشر «${before.nameAr}» في الدليل.`,
+      relatedEntityType: "BusinessProfile",
+      relatedEntityId: before.id,
+    });
+    if (before.owner.email) {
+      const base = process.env.NEXTAUTH_URL ?? "";
+      try {
+        await sendEmail({
+          to: before.owner.email,
+          subject: "تم اعتماد عملك في دليل النبك",
+          html: listingApprovedHtml(
+            before.owner.name,
+            before.nameAr,
+            `${base}/businesses/${before.slug}`,
+          ),
+        });
+      } catch (e) {
+        console.error("[approveListingAction] email failed", e);
+      }
+    }
+
     revalidatePath("/admin/moderation");
     revalidatePath("/businesses");
     revalidatePath("/businesses/[slug]", "page");
@@ -902,7 +942,12 @@ export async function rejectListingAction(
     const cleanReason = reason.trim().slice(0, 500);
     const before = await prisma.businessProfile.findUnique({
       where: { id },
-      select: { status: true },
+      select: {
+        id: true,
+        status: true,
+        nameAr: true,
+        owner: { select: { id: true, name: true, email: true } },
+      },
     });
     if (!before) return { ok: false, error: "العمل غير موجود" };
 
@@ -922,9 +967,39 @@ export async function rejectListingAction(
       action: "LISTING_REJECTED",
       entityType: "BusinessProfile",
       entityId: id,
-      before,
+      before: { status: before.status },
       after: { status: "REJECTED", reason: cleanReason || null },
     });
+
+    // Owner-facing notification + email so they know to fix the issue.
+    await createNotification({
+      userId: before.owner.id,
+      type: "LISTING_REJECTED",
+      titleAr: "لم يتم اعتماد عملك",
+      messageAr: cleanReason
+        ? `«${before.nameAr}» — ${cleanReason}`
+        : `«${before.nameAr}» يحتاج إلى تعديل قبل النشر.`,
+      relatedEntityType: "BusinessProfile",
+      relatedEntityId: before.id,
+    });
+    if (before.owner.email) {
+      const base = process.env.NEXTAUTH_URL ?? "";
+      try {
+        await sendEmail({
+          to: before.owner.email,
+          subject: "لم يتم اعتماد عملك في دليل النبك",
+          html: listingRejectedHtml(
+            before.owner.name,
+            before.nameAr,
+            cleanReason || "بحاجة إلى تعديلات قبل النشر.",
+            `${base}/dashboard`,
+          ),
+        });
+      } catch (e) {
+        console.error("[rejectListingAction] email failed", e);
+      }
+    }
+
     revalidatePath("/admin/moderation");
     return { ok: true };
   } catch (e) {

@@ -16,6 +16,8 @@ const TYPE_LABEL: Record<string, string> = {
   CONTACT_REPLY: "ردّ على رسالتك",
   LISTING_APPROVED: "تم اعتماد عملك",
   LISTING_REJECTED: "تحتاج مراجعة",
+  LISTING_SUSPENDED: "تم إيقاف عملك",
+  LISTING_RESTORED: "تم استعادة عملك",
 };
 
 function targetHref(

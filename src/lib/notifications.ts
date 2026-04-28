@@ -6,7 +6,9 @@ export type NotificationType =
   | "VIEW_MILESTONE"
   | "CONTACT_REPLY"
   | "LISTING_APPROVED"
-  | "LISTING_REJECTED";
+  | "LISTING_REJECTED"
+  | "LISTING_SUSPENDED"
+  | "LISTING_RESTORED";
 
 /**
  * Best-effort notification creator. Failures are swallowed — a failure to
