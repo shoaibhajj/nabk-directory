@@ -4,7 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ContactMessageStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
-import { adminUpdateContactStatusAction } from "@/features/support/actions";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  adminUpdateContactStatusAction,
+  adminReplyToContactAction,
+} from "@/features/support/actions";
 
 const NEXT_STATUS: Array<{
   value: ContactMessageStatus;
@@ -12,7 +16,7 @@ const NEXT_STATUS: Array<{
   variant: "primary" | "outline" | "ghost";
 }> = [
   { value: "READ", label: "تعليم كمقروءة", variant: "outline" },
-  { value: "RESOLVED", label: "تم الرد", variant: "primary" },
+  { value: "RESOLVED", label: "إغلاق", variant: "primary" },
   { value: "SPAM", label: "إزعاج", variant: "ghost" },
 ];
 
@@ -21,18 +25,24 @@ export function ContactMessageActions({
   currentStatus,
   email,
   subject,
+  existingReply,
 }: {
   id: string;
   currentStatus: ContactMessageStatus;
   email: string;
   subject: string | null;
+  existingReply: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showReply, setShowReply] = useState(false);
+  const [reply, setReply] = useState(existingReply ?? "");
+  const [success, setSuccess] = useState<string | null>(null);
 
   function update(status: ContactMessageStatus) {
     setError(null);
+    setSuccess(null);
     start(async () => {
       const res = await adminUpdateContactStatusAction({ id, status });
       if (!res.ok) {
@@ -43,19 +53,44 @@ export function ContactMessageActions({
     });
   }
 
-  // mailto: opens the admin's mail client with the user's address pre-filled,
-  // which is the simplest "reply" path without storing email content here.
+  function sendReply() {
+    setError(null);
+    setSuccess(null);
+    start(async () => {
+      const res = await adminReplyToContactAction({ id, reply });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setSuccess("تم إرسال الردّ.");
+      setShowReply(false);
+      router.refresh();
+    });
+  }
+
+  // Fallback: open the admin's mail client (used only if Resend is down or
+  // the admin prefers email — the in-app reply is the primary path).
   const replySubject = encodeURIComponent(
     `رد: ${subject ?? "رسالتك إلى دليل النبك"}`,
   );
   const mailto = `mailto:${email}?subject=${replySubject}`;
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <a href={mailto} className="text-xs font-semibold text-accent underline">
-        الرد عبر البريد
-      </a>
+    <div className="flex w-full flex-col items-stretch gap-2 md:max-w-xs md:items-end">
       <div className="flex flex-wrap justify-end gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="accent"
+          disabled={pending}
+          onClick={() => {
+            setShowReply((v) => !v);
+            setError(null);
+            setSuccess(null);
+          }}
+        >
+          {showReply ? "إلغاء" : existingReply ? "تعديل الردّ" : "ردّ"}
+        </Button>
         {NEXT_STATUS.filter((s) => s.value !== currentStatus).map((s) => (
           <Button
             key={s.value}
@@ -69,8 +104,45 @@ export function ContactMessageActions({
           </Button>
         ))}
       </div>
-      {pending && <p className="text-xs text-muted-foreground">جارٍ الحفظ…</p>}
+      <a href={mailto} className="text-xs font-semibold text-accent underline">
+        أو الرد عبر البريد مباشرة
+      </a>
+
+      {showReply ? (
+        <div className="w-full space-y-2 rounded-lg border border-border bg-secondary/30 p-3">
+          <Textarea
+            rows={5}
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            placeholder="اكتب الردّ هنا… سيُرسل بالبريد للمستخدم وسيظهر في «رسائلي»."
+            maxLength={4000}
+            disabled={pending}
+          />
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{reply.length} / 4000</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              disabled={pending || reply.trim().length < 2}
+              onClick={sendReply}
+            >
+              {pending ? "جارٍ الإرسال…" : "إرسال الردّ"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {pending && !showReply ? (
+        <p className="text-xs text-muted-foreground">جارٍ الحفظ…</p>
+      ) : null}
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {success && <p className="text-xs text-primary">{success}</p>}
+      {existingReply && !showReply ? (
+        <p className="rounded-md bg-primary/5 px-2 py-1 text-xs text-primary">
+          ✓ تم الردّ سابقاً
+        </p>
+      ) : null}
     </div>
   );
 }

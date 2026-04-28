@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -45,7 +46,13 @@ export async function postCommentAction(
     }),
     prisma.businessProfile.findUnique({
       where: { id: parsed.data.businessId },
-      select: { id: true, status: true, deletedAt: true },
+      select: {
+        id: true,
+        status: true,
+        deletedAt: true,
+        ownerId: true,
+        nameAr: true,
+      },
     }),
   ]);
   if (!user) return { ok: false, error: "غير مسموح." };
@@ -105,6 +112,24 @@ export async function postCommentAction(
       contentLength: parsed.data.content.length,
     },
   });
+
+  // Only ping the owner when the comment is actually visible to the public
+  // (PENDING_REVIEW comments may never be approved, so a notification then
+  // would be premature) and when they are not the commenter themselves.
+  if (status === "VISIBLE" && business.ownerId !== user.id) {
+    const preview =
+      parsed.data.content.length > 90
+        ? `${parsed.data.content.slice(0, 90)}…`
+        : parsed.data.content;
+    await createNotification({
+      userId: business.ownerId,
+      type: "COMMENT_NEW",
+      titleAr: `تعليق جديد على «${business.nameAr}»`,
+      messageAr: preview,
+      relatedEntityType: "BusinessProfile",
+      relatedEntityId: business.id,
+    });
+  }
 
   revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
@@ -213,6 +238,8 @@ export async function adminApproveCommentAction(
     after: { status: "VISIBLE" },
   });
 
+  await notifyOwnerOnApprove(commentId);
+
   revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
 }
@@ -264,4 +291,33 @@ export async function adminHideCommentAction(
 
   revalidatePath("/businesses/[slug]", "page");
   return { ok: true };
+}
+
+// Notify the business owner when an admin approves a previously-pending
+// comment, since the original `postCommentAction` ping was suppressed at
+// PENDING_REVIEW. We extend `adminApproveCommentAction` here rather than
+// adding a second action so the audit log stays consistent.
+async function notifyOwnerOnApprove(commentId: string) {
+  const c = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      content: true,
+      userId: true,
+      business: {
+        select: { id: true, ownerId: true, nameAr: true },
+      },
+    },
+  });
+  if (!c || !c.business) return;
+  if (c.business.ownerId === c.userId) return;
+  const preview =
+    c.content.length > 90 ? `${c.content.slice(0, 90)}…` : c.content;
+  await createNotification({
+    userId: c.business.ownerId,
+    type: "COMMENT_NEW",
+    titleAr: `تعليق جديد على «${c.business.nameAr}»`,
+    messageAr: preview,
+    relatedEntityType: "BusinessProfile",
+    relatedEntityId: c.business.id,
+  });
 }

@@ -16,8 +16,8 @@ import {
 import { getCategoryIcon } from "@/components/business/category-icons";
 import { getBusinessBySlugOrId } from "@/features/businesses/queries";
 import { isOpenNow, DAY_NAMES_AR } from "@/lib/working-hours";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { trackBusinessView } from "@/lib/view-tracker";
 import {
   getMyRating,
   getRatingDistribution,
@@ -63,10 +63,12 @@ export default async function BusinessDetailPage({
     getCommentsForBusiness(business.id, viewerId, isAdmin, commentsPage),
   ]);
 
-  // Increment view (non-blocking, ok to await briefly)
-  await prisma.businessProfile
-    .update({ where: { id: business.id }, data: { viewCount: { increment: 1 } } })
-    .catch(() => null);
+  // Increment view + fire owner milestone notifications (silent on failure).
+  // Skip self-views by the owner so the counter reflects external interest
+  // and the owner doesn't trigger their own "you reached X views" pings.
+  if (!ownsBusiness) {
+    await trackBusinessView(business.id);
+  }
 
   const status = isOpenNow(business.workingHours);
   const phones = business.phoneNumbers;

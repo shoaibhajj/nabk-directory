@@ -80,6 +80,13 @@ enum AuditAction {
   USER_DELETED
   CONTACT_MESSAGE_RECEIVED
   CONTACT_MESSAGE_UPDATED
+  CONTACT_MESSAGE_REPLIED
+  COUNTRY_CREATED
+  COUNTRY_UPDATED
+  COUNTRY_DELETED
+  CITY_CREATED
+  CITY_UPDATED
+  CITY_DELETED
   LISTING_CREATED
   LISTING_UPDATED
   LISTING_SUBMITTED
@@ -132,7 +139,8 @@ model User {
   categorySuggestions     CategorySuggestion[]
   ratings                 Rating[]
   comments                Comment[]
-  contactMessages         ContactMessage[]
+  contactMessages         ContactMessage[]         @relation("ContactSender")
+  repliedContactMessages  ContactMessage[]         @relation("ContactReplier")
 
   @@map("users")
 }
@@ -202,15 +210,32 @@ model LoginToken {
   @@map("login_tokens")
 }
 
+model Country {
+  id        String   @id @default(cuid())
+  nameAr    String
+  nameEn    String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cities    City[]
+
+  @@map("countries")
+}
+
 model City {
   id        String            @id @default(cuid())
+  countryId String?
   nameAr    String
   nameEn    String
   slug      String            @unique
   isActive  Boolean           @default(true)
   createdAt DateTime          @default(now())
+  updatedAt DateTime          @default(now()) @updatedAt
+  country   Country?          @relation(fields: [countryId], references: [id])
   listings  BusinessProfile[]
 
+  @@index([countryId])
   @@map("cities")
 }
 
@@ -251,32 +276,36 @@ model CategorySuggestion {
 }
 
 model BusinessProfile {
-  id               String         @id @default(cuid())
-  ownerId          String
-  cityId           String
-  categoryId       String
-  subcategoryId    String?
-  nameAr           String
-  nameEn           String?
-  slug             String         @unique
-  descriptionAr    String?        @db.Text
-  descriptionEn    String?        @db.Text
-  addressAr        String?
-  latitude         Float?
-  longitude        Float?
-  status           BusinessStatus @default(DRAFT)
-  coverImageId     String?
-  logoImageId      String?
-  viewCount        Int            @default(0)
-  searchableText   String?        @db.Text
-  ratingAverage    Float          @default(0)
-  ratingCount      Int            @default(0)
-  publishedAt      DateTime?
-  suspendedAt      DateTime?
-  suspensionReason String?
-  deletedAt        DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                        String         @id @default(cuid())
+  ownerId                   String
+  cityId                    String
+  categoryId                String
+  subcategoryId             String?
+  nameAr                    String
+  nameEn                    String?
+  slug                      String         @unique
+  descriptionAr             String?        @db.Text
+  descriptionEn             String?        @db.Text
+  addressAr                 String?
+  latitude                  Float?
+  longitude                 Float?
+  status                    BusinessStatus @default(DRAFT)
+  coverImageId              String?
+  logoImageId               String?
+  viewCount                 Int            @default(0)
+  // Highest view-count milestone for which the owner has already received an
+  // engagement notification — prevents duplicate "you reached X views"
+  // pings if the page is refreshed after a milestone.
+  lastNotifiedViewMilestone Int            @default(0)
+  searchableText            String?        @db.Text
+  ratingAverage             Float          @default(0)
+  ratingCount               Int            @default(0)
+  publishedAt               DateTime?
+  suspendedAt               DateTime?
+  suspensionReason          String?
+  deletedAt                 DateTime?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   owner        User           @relation(fields: [ownerId], references: [id])
   city         City           @relation(fields: [cityId], references: [id])
@@ -433,18 +462,22 @@ model PlatformSetting {
 // hashed IP and a short user-agent string for abuse triage but never
 // expose them publicly.
 model ContactMessage {
-  id        String               @id @default(cuid())
-  name      String
-  email     String
-  subject   String?
-  message   String               @db.Text
-  status    ContactMessageStatus @default(NEW)
-  ipHash    String?
-  userAgent String?
-  userId    String?
-  user      User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  id          String               @id @default(cuid())
+  name        String
+  email       String
+  subject     String?
+  message     String               @db.Text
+  status      ContactMessageStatus @default(NEW)
+  ipHash      String?
+  userAgent   String?
+  userId      String?
+  user        User?                @relation("ContactSender", fields: [userId], references: [id], onDelete: SetNull)
+  reply       String?              @db.Text
+  repliedAt   DateTime?
+  repliedById String?
+  repliedBy   User?                @relation("ContactReplier", fields: [repliedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@index([status, createdAt])
   @@index([userId])

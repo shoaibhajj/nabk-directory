@@ -8,8 +8,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { withRateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit";
-import { sendEmail, contactReceivedAdminHtml } from "@/lib/email";
+import {
+  sendEmail,
+  contactReceivedAdminHtml,
+  contactReplyHtml,
+} from "@/lib/email";
 import { getAppUrl } from "@/lib/utils";
+import { createNotification } from "@/lib/notifications";
 import type { ContactMessageStatus } from "@prisma/client";
 
 async function clientIp() {
@@ -218,5 +223,129 @@ export async function adminUpdateContactStatusAction(input: {
   });
 
   revalidatePath("/admin/contact-messages");
+  return { ok: true };
+}
+
+const replySchema = z.object({
+  id: z.string().min(1),
+  reply: z
+    .string()
+    .trim()
+    .min(2, "الردّ قصير جداً")
+    .max(4000, "الردّ طويل جداً (الحد 4000 حرف)"),
+});
+
+/**
+ * Admin replies to a contact message: stores the reply, marks the message
+ * RESOLVED, audit-logs the action, sends the reply by email, and (if the
+ * sender was logged in at submission time) also creates an in-app
+ * notification so they see it under "رسائلي" + the bell.
+ */
+export async function adminReplyToContactAction(input: {
+  id: string;
+  reply: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  const role = session?.user?.role;
+  if (
+    !session?.user?.id ||
+    (role !== "ADMIN" && role !== "SUPER_ADMIN")
+  ) {
+    return { ok: false, error: "غير مسموح." };
+  }
+
+  const rl = await withRateLimit(
+    `contact-reply:${session.user.id}`,
+    60,
+    60 * 60 * 1000,
+  );
+  if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
+
+  const parsed = replySchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "بيانات غير صالحة.",
+    };
+  }
+
+  const message = await prisma.contactMessage.findUnique({
+    where: { id: parsed.data.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      subject: true,
+      message: true,
+      userId: true,
+      reply: true,
+      repliedAt: true,
+    },
+  });
+  if (!message) return { ok: false, error: "الرسالة غير موجودة." };
+  if (message.repliedAt) {
+    return { ok: false, error: "تمّ الردّ على هذه الرسالة سابقاً." };
+  }
+
+  // Race-safe claim: only the first concurrent caller flips repliedAt
+  // from null → now. Losers get count=0 and exit before sending email or
+  // creating a duplicate notification.
+  const claim = await prisma.contactMessage.updateMany({
+    where: { id: parsed.data.id, repliedAt: null },
+    data: {
+      reply: parsed.data.reply,
+      repliedAt: new Date(),
+      repliedById: session.user.id,
+      status: "RESOLVED",
+    },
+  });
+  if (claim.count === 0) {
+    return { ok: false, error: "تمّ الردّ على هذه الرسالة سابقاً." };
+  }
+  const updated = { id: parsed.data.id };
+
+  await recordAudit({
+    actor: {
+      id: session.user.id,
+      email: session.user.email ?? null,
+      role: role ?? null,
+    },
+    action: "CONTACT_MESSAGE_REPLIED",
+    entityType: "ContactMessage",
+    entityId: updated.id,
+    before: { hadReply: Boolean(message.reply) },
+    after: { replyLength: parsed.data.reply.length },
+  });
+
+  // Email goes to the address on the original message (works for both
+  // logged-in and anonymous senders). The inline thread link is included
+  // only when the sender was logged in — anonymous users can't see the
+  // /contact/my-messages page.
+  const link = message.userId ? `${getAppUrl()}/contact/my-messages` : null;
+  await sendEmail({
+    to: message.email,
+    subject: `ردّ على رسالتك — ${message.subject ?? "دليل النبك"}`,
+    html: contactReplyHtml({
+      name: message.name,
+      originalSubject: message.subject,
+      originalMessage: message.message,
+      reply: parsed.data.reply,
+      link,
+    }),
+  });
+
+  if (message.userId) {
+    await createNotification({
+      userId: message.userId,
+      type: "CONTACT_REPLY",
+      titleAr: "وصلك ردّ من فريق الدعم",
+      messageAr: `بخصوص: ${message.subject ?? "(بدون موضوع)"}`,
+      relatedEntityType: "ContactMessage",
+      relatedEntityId: updated.id,
+    });
+  }
+
+  revalidatePath("/admin/contact-messages");
+  revalidatePath("/contact/my-messages");
   return { ok: true };
 }

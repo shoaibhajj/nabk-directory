@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Store, Info, Mail } from "lucide-react";
+import { Store, Info, Mail, Inbox } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export async function Header() {
   const session = await auth();
@@ -41,6 +42,14 @@ export async function Header() {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              <NotificationBell />
+              <Link
+                href="/contact/my-messages"
+                className="hidden items-center gap-1 text-sm font-semibold text-foreground hover:text-accent md:inline-flex"
+                aria-label="رسائلي"
+              >
+                <Inbox className="h-4 w-4" /> رسائلي
+              </Link>
               {user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? (
                 <Link href="/admin">
                   <Button variant="ghost" size="sm">

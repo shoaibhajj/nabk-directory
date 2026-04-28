@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { withRateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -59,7 +60,13 @@ export async function submitRatingAction(
 
   const business = await prisma.businessProfile.findUnique({
     where: { id: parsed.data.businessId },
-    select: { id: true, ownerId: true, status: true, deletedAt: true },
+    select: {
+      id: true,
+      ownerId: true,
+      status: true,
+      deletedAt: true,
+      nameAr: true,
+    },
   });
   if (!business || business.deletedAt || business.status !== "ACTIVE") {
     return { ok: false, error: "العمل غير متاح." };
@@ -121,6 +128,21 @@ export async function submitRatingAction(
         : { businessProfileId: business.id },
     after: { score: parsed.data.score, businessProfileId: business.id },
   });
+
+  // Only notify on the FIRST rating from this user. Subsequent edits would
+  // spam the owner with a near-duplicate ping every time the score changes.
+  // The owner-self check is defensive — it's already enforced above, but
+  // keeping it here documents the rule at the notification site.
+  if (previousScore === null && business.ownerId !== session.user.id) {
+    await createNotification({
+      userId: business.ownerId,
+      type: "RATING_NEW",
+      titleAr: `تقييم جديد لـ«${business.nameAr}»`,
+      messageAr: `حصلت على تقييم ${parsed.data.score} من ٥. شكراً للزائر!`,
+      relatedEntityType: "BusinessProfile",
+      relatedEntityId: business.id,
+    });
+  }
 
   revalidatePath("/businesses/[slug]", "page");
   return { ok: true };

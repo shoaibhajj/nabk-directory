@@ -74,6 +74,8 @@ export default async function AdminContactMessagesPage({
         status: true,
         createdAt: true,
         userId: true,
+        reply: true,
+        repliedAt: true,
       },
     }),
     prisma.contactMessage.count({ where }),
@@ -154,12 +156,26 @@ export default async function AdminContactMessagesPage({
                     <p className="mt-2 whitespace-pre-wrap text-sm">
                       {m.message}
                     </p>
+                    {m.reply ? (
+                      <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                        <h4 className="mb-1 text-xs font-semibold text-primary">
+                          الردّ المُرسَل
+                          {m.repliedAt
+                            ? ` • ${formatDate(m.repliedAt)}`
+                            : null}
+                        </h4>
+                        <p className="whitespace-pre-wrap text-sm text-foreground">
+                          {m.reply}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                   <ContactMessageActions
                     id={m.id}
                     currentStatus={m.status}
                     email={m.email}
                     subject={m.subject}
+                    existingReply={m.reply}
                   />
                 </div>
               </CardContent>

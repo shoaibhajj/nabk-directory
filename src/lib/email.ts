@@ -128,6 +128,38 @@ export function contactReceivedAdminHtml(opts: {
   `;
 }
 
+export function contactReplyHtml(opts: {
+  name: string;
+  originalSubject: string | null;
+  originalMessage: string;
+  reply: string;
+  link: string | null;
+}) {
+  // Both the original message (already supplied by the user) and the admin's
+  // reply are escaped before embedding — Resend renders raw HTML, and even
+  // an admin's reply could contain accidental tags that break layout.
+  const safe = {
+    name: escapeHtml(opts.name),
+    subject: escapeHtml(opts.originalSubject ?? "(بدون موضوع)"),
+    original: escapeHtml(opts.originalMessage).replace(/\n/g, "<br/>"),
+    reply: escapeHtml(opts.reply).replace(/\n/g, "<br/>"),
+  };
+  const ctaButton = opts.link
+    ? `<p style="margin-top:16px"><a href="${opts.link}" style="background:#1A664D;color:#fff;padding:10px 20px;border-radius:9999px;text-decoration:none">عرض المحادثة في الموقع</a></p>`
+    : "";
+  return `
+    <div style="font-family:'Cairo',sans-serif;background:#FCFAF8;padding:24px;direction:rtl;text-align:right">
+      <h2 style="color:#1A664D">دليل النبك — ردّ على رسالتك</h2>
+      <p>مرحباً ${safe.name},</p>
+      <p>وصلنا ردّ على رسالتك بخصوص <strong>«${safe.subject}»</strong>:</p>
+      <div style="background:#fff;border:1px solid #E5DFD7;padding:14px;border-radius:8px;white-space:pre-wrap">${safe.reply}</div>
+      <p style="color:#7E7367;font-size:12px;margin-top:20px">رسالتك الأصلية:</p>
+      <div style="background:#F4F0E6;border:1px solid #E5DFD7;padding:10px;border-radius:8px;color:#5C5147;font-size:13px;white-space:pre-wrap">${safe.original}</div>
+      ${ctaButton}
+    </div>
+  `;
+}
+
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")

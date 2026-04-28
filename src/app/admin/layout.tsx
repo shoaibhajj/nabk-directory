@@ -13,6 +13,7 @@ const NAV: NavItem[] = [
   { href: "/admin/contact-messages", label: "رسائل التواصل" },
   { href: "/admin/categories", label: "التصنيفات" },
   { href: "/admin/users", label: "المستخدمون", superAdminOnly: true },
+  { href: "/admin/places", label: "البلدان والمدن", superAdminOnly: true },
   { href: "/admin/audit", label: "سجل التدقيق" },
 ];
 
