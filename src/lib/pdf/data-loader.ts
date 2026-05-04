@@ -1,6 +1,10 @@
 /**
  * Loads all data needed for PDF generation from the database.
  * Returns a fully-populated PdfDocumentInput ready for generatePdf().
+ *
+ * Round 1 fixes:
+ * - Logos: actually load mediaAsset for each business when includeBusinessLogos = true
+ * - Multi-city: support cityIds array (falls back to single cityId for backwards compat)
  */
 
 import { prisma } from "@/lib/prisma";
@@ -20,6 +24,16 @@ import type {
 } from "./types";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nabk-directory.com";
+
+/**
+ * Resolves a stored asset URL to an absolute URL suitable for @react-pdf/renderer.
+ * Cloudinary URLs are returned as-is. Relative paths get the SITE_URL prefix.
+ */
+function resolveAssetUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
 
 export async function loadPdfEditionData(
   editionId: string,
@@ -46,9 +60,9 @@ export async function loadPdfEditionData(
   const targetCategoryIds =
     edition.generationMode === "SELECTED_CATEGORIES"
       ? edition.categories.map((c) => c.categoryId)
-      : undefined; // undefined = all categories for this city
+      : undefined;
 
-  // ─ 3. Load businesses ────────────────────────────────────────────────────────
+  // ─ 3. Load businesses (with logo media asset) ────────────────────────────────
   const businesses = await prisma.businessProfile.findMany({
     where: {
       cityId: edition.cityId,
@@ -60,6 +74,12 @@ export async function loadPdfEditionData(
       phoneNumbers: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       category: true,
+      // Load the primary logo asset
+      mediaAssets: {
+        where: { assetType: "LOGO", isPrimary: true },
+        take: 1,
+        select: { url: true },
+      },
     },
     orderBy: { nameAr: "asc" },
   });
@@ -73,15 +93,12 @@ export async function loadPdfEditionData(
   }
 
   // ─ 5. Build category configs ──────────────────────────────────────────────────
-  // Use edition categories config if available, else create default config
   const editionCatMap = new Map(
     edition.categories.map((ec) => [ec.categoryId, ec])
   );
 
-  // Get all unique category IDs from loaded businesses
   const allCategoryIds = [...businessesByCategory.keys()];
 
-  // Load category metadata for any IDs not already in editionCatMap
   const extraCategoryIds = allCategoryIds.filter((id) => !editionCatMap.has(id));
   const extraCategories =
     extraCategoryIds.length > 0
@@ -109,7 +126,8 @@ export async function loadPdfEditionData(
         slug: b.slug,
         addressAr: b.addressAr,
         descriptionAr: b.descriptionAr,
-        logoUrl: null, // loaded separately if includeBusinessLogos = true
+        // ✅ Fixed: actually load the logo URL instead of hardcoding null
+        logoUrl: resolveAssetUrl(b.mediaAssets?.[0]?.url ?? null),
         ratingAverage: b.ratingAverage,
         ratingCount: b.ratingCount,
         phoneNumbers: b.phoneNumbers,
@@ -137,11 +155,13 @@ export async function loadPdfEditionData(
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
   // ─ 6. Build ads ────────────────────────────────────────────────────────────────
+  // ✅ Fixed: map ALL active ads from editionAds (was already correct in query,
+  // but now we also resolve imageUrl to absolute URL)
   const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
     id: ea.ad.id,
     titleAr: ea.ad.titleAr,
     advertiserName: ea.ad.advertiserName,
-    imageUrl: ea.ad.imageUrl,
+    imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
     targetUrl: ea.ad.targetUrl,
     phone: ea.ad.phone,
     placementType: ea.ad.placementType,

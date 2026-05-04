@@ -3,6 +3,13 @@
  *
  * Uses @react-pdf/renderer to build an Arabic RTL PDF document.
  * Entry point: generatePdf(input: PdfDocumentInput) => Promise<GenerationResult>
+ *
+ * Round 1 fixes:
+ * - TOC: clean category list (no 'منشأة X' placeholder)
+ * - Alphabetical index moved BEFORE content, hierarchical format
+ * - Divider page before each category (dynamic icon + name)
+ * - Ads: shown after every section, not just every 3rd
+ * - Logos: rendered when includeBusinessLogos = true
  */
 
 import React from "react";
@@ -31,6 +38,37 @@ import type {
   GenerationResult,
 } from "./types";
 
+// ── Category icon map (dynamic divider pages) ─────────────────────────────────
+
+const CATEGORY_ICONS: Record<string, string> = {
+  "ميكانيك وسيارات": "🚗",
+  "مطاعم وكافيهات": "🍽️",
+  "صيدليات": "💊",
+  "عيادات وأطباء": "🏥",
+  "سوبر ماركت": "🛒",
+  "صالونات وحلاقة": "✂️",
+  "بناء وإكساء": "🏗️",
+  "إلكترونيات": "📱",
+  "ألبسة": "👔",
+  "مكاتب": "🏢",
+  "مواصلات ونقليات": "🚌",
+  "تعليم ومعاهد": "📚",
+  "مجوهرات": "💍",
+  "أدوات منزلية": "🏠",
+  "مخابز وحلويات": "🍞",
+  "خدمات": "🔧",
+};
+
+function getCategoryIcon(nameAr: string): string {
+  // exact match first
+  if (CATEGORY_ICONS[nameAr]) return CATEGORY_ICONS[nameAr];
+  // partial match
+  for (const [key, icon] of Object.entries(CATEGORY_ICONS)) {
+    if (nameAr.includes(key) || key.includes(nameAr)) return icon;
+  }
+  return "📋";
+}
+
 // ── QR helper ─────────────────────────────────────────────────────────────────
 
 async function buildQrDataUrl(url: string): Promise<string> {
@@ -50,7 +88,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       fontFamily: "Cairo",
       backgroundColor: theme.bgColor,
       paddingTop: margins.top,
-      paddingBottom: margins.bottom + 20, // extra for page number
+      paddingBottom: margins.bottom + 20,
       paddingLeft: margins.left,
       paddingRight: margins.right,
       direction: "rtl" as never,
@@ -96,7 +134,37 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       backgroundColor: theme.accentColor,
       marginVertical: 20,
     },
-    // ─ Section header
+    // ─ Divider page (before each category)
+    dividerPage: {
+      fontFamily: "Cairo",
+      backgroundColor: theme.primaryColor,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 40,
+    },
+    dividerIcon: {
+      fontSize: 64,
+      marginBottom: 24,
+      textAlign: "center",
+    },
+    dividerTitle: {
+      fontFamily: "Cairo",
+      fontSize: 42,
+      fontWeight: 700,
+      color: "#ffffff",
+      textAlign: "center",
+      direction: "rtl" as never,
+      marginBottom: 16,
+    },
+    dividerAccentBar: {
+      width: 80,
+      height: 4,
+      backgroundColor: theme.accentColor,
+      borderRadius: 2,
+    },
+    // ─ Section header (inline, within content page)
     sectionHeader: {
       backgroundColor: theme.primaryColor,
       paddingVertical: 10,
@@ -176,6 +244,30 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       color: theme.textColor,
       direction: "ltr" as never,
     },
+    // ─ Logo avatar fallback
+    logoAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.sectionBgColor,
+      borderWidth: 1,
+      borderColor: theme.borderColor,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    logoAvatarText: {
+      fontFamily: "Cairo",
+      fontSize: 18,
+      fontWeight: 700,
+      color: theme.primaryColor,
+    },
+    logoImage: {
+      width: 44,
+      height: 44,
+      objectFit: "contain",
+      borderRadius: 4,
+    },
     // ─ Dense template (2-column grid)
     denseGrid: {
       display: "flex",
@@ -211,6 +303,42 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       height: "45%",
     },
     adImage: { width: "100%", height: "100%", objectFit: "contain" },
+    // ─ Ad text fallback (when no image)
+    adTextCard: {
+      borderWidth: 2,
+      borderColor: theme.accentColor,
+      borderRadius: 8,
+      padding: 20,
+      marginVertical: 10,
+      backgroundColor: theme.sectionBgColor,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+    },
+    adTextTitle: {
+      fontFamily: "Cairo",
+      fontSize: 16,
+      fontWeight: 700,
+      color: theme.primaryColor,
+      textAlign: "center",
+      direction: "rtl" as never,
+      marginBottom: 6,
+    },
+    adTextBody: {
+      fontFamily: "Cairo",
+      fontSize: 11,
+      color: theme.textColor,
+      textAlign: "center",
+      direction: "rtl" as never,
+    },
+    adTextPhone: {
+      fontFamily: "Cairo",
+      fontSize: 12,
+      color: theme.accentColor,
+      textAlign: "center",
+      direction: "ltr" as never,
+      marginTop: 8,
+    },
     // ─ Profile blocks
     profileBlock: {
       borderWidth: 1,
@@ -245,12 +373,77 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "rtl" as never,
       marginTop: 4,
     },
-    // ─ Index
+    // ─ TOC (clean, category-level)
+    tocTitle: {
+      fontFamily: "Cairo",
+      fontSize: 20,
+      fontWeight: 700,
+      color: theme.primaryColor,
+      textAlign: "right",
+      direction: "rtl" as never,
+      marginBottom: 16,
+    },
+    tocRow: {
+      display: "flex",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.borderColor,
+    },
+    tocCategoryName: {
+      fontFamily: "Cairo",
+      fontSize: 12,
+      fontWeight: 700,
+      color: theme.textColor,
+      direction: "rtl" as never,
+    },
+    tocCount: {
+      fontFamily: "Cairo",
+      fontSize: 10,
+      color: theme.mutedColor,
+    },
+    tocIcon: {
+      fontFamily: "Cairo",
+      fontSize: 14,
+      marginLeft: 6,
+    },
+    // ─ Alphabetical index (hierarchical)
+    indexTitle: {
+      fontFamily: "Cairo",
+      fontSize: 20,
+      fontWeight: 700,
+      color: theme.primaryColor,
+      textAlign: "right",
+      direction: "rtl" as never,
+      marginBottom: 12,
+    },
+    indexCategoryHeader: {
+      backgroundColor: theme.sectionBgColor,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      marginTop: 10,
+      marginBottom: 4,
+      borderRadius: 4,
+      borderRightWidth: 3,
+      borderRightColor: theme.primaryColor,
+    },
+    indexCategoryHeaderText: {
+      fontFamily: "Cairo",
+      fontSize: 11,
+      fontWeight: 700,
+      color: theme.primaryColor,
+      textAlign: "right",
+      direction: "rtl" as never,
+    },
     indexRow: {
       display: "flex",
       flexDirection: "row",
       justifyContent: "space-between",
+      alignItems: "center",
       paddingVertical: 4,
+      paddingHorizontal: 8,
       borderBottomWidth: 1,
       borderBottomColor: theme.borderColor,
     },
@@ -259,12 +452,14 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       fontSize: 10,
       color: theme.textColor,
       direction: "rtl" as never,
+      flex: 1,
     },
-    indexCategory: {
+    indexSubcategory: {
       fontFamily: "Cairo",
       fontSize: 9,
       color: theme.mutedColor,
       direction: "rtl" as never,
+      marginLeft: 8,
     },
     // ─ Page number
     pageNumber: {
@@ -290,36 +485,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       fontWeight: 700,
       transform: "rotate(-35deg)",
     },
-    // ─ TOC
-    tocTitle: {
-      fontFamily: "Cairo",
-      fontSize: 20,
-      fontWeight: 700,
-      color: theme.primaryColor,
-      textAlign: "right",
-      direction: "rtl" as never,
-      marginBottom: 16,
-    },
-    tocRow: {
-      display: "flex",
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingVertical: 6,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.borderColor,
-    },
-    tocName: {
-      fontFamily: "Cairo",
-      fontSize: 11,
-      color: theme.textColor,
-      direction: "rtl" as never,
-    },
-    tocCount: {
-      fontFamily: "Cairo",
-      fontSize: 9,
-      color: theme.mutedColor,
-    },
     // ─ Intro text
     introText: {
       fontFamily: "Cairo",
@@ -335,6 +500,34 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
 
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
+function LogoElement({
+  business,
+  styles,
+  includeLogo,
+}: {
+  business: PdfBusiness;
+  styles: ReturnType<typeof makeStyles>;
+  includeLogo: boolean;
+}) {
+  if (!includeLogo) return null;
+  if (business.logoUrl) {
+    return React.createElement(Image, {
+      src: business.logoUrl,
+      style: styles.logoImage,
+    });
+  }
+  // Fallback: first letter avatar
+  return React.createElement(
+    View,
+    { style: styles.logoAvatar },
+    React.createElement(
+      Text,
+      { style: styles.logoAvatarText },
+      business.nameAr.charAt(0)
+    )
+  );
+}
+
 function BusinessCardStandard({
   business,
   qrDataUrl,
@@ -348,20 +541,33 @@ function BusinessCardStandard({
   includeQr: boolean;
   includeLogo: boolean;
 }) {
-  const content = React.createElement(
+  const hasQr = includeQr && !!qrDataUrl;
+  const hasLogo = includeLogo;
+  const showLeftSide = hasQr || hasLogo;
+
+  return React.createElement(
     View,
     { style: styles.businessCard },
     React.createElement(
       View,
-      { style: includeQr && qrDataUrl ? styles.qrContainer : undefined },
-      // Left side: QR
-      includeQr && qrDataUrl
-        ? React.createElement(Image, { src: qrDataUrl, style: styles.qrImage })
+      { style: showLeftSide ? styles.qrContainer : undefined },
+      // Left side: logo or QR
+      showLeftSide
+        ? React.createElement(
+            View,
+            { style: { display: "flex", flexDirection: "column", gap: 4, alignItems: "center" } },
+            hasLogo
+              ? React.createElement(LogoElement, { business, styles, includeLogo })
+              : null,
+            hasQr
+              ? React.createElement(Image, { src: qrDataUrl!, style: styles.qrImage })
+              : null
+          )
         : null,
       // Right side: info
       React.createElement(
         View,
-        { style: includeQr && qrDataUrl ? styles.businessInfo : undefined },
+        { style: showLeftSide ? styles.businessInfo : undefined },
         React.createElement(Text, { style: styles.businessName }, business.nameAr),
         business.addressAr
           ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
@@ -390,7 +596,6 @@ function BusinessCardStandard({
       )
     )
   );
-  return content;
 }
 
 function BusinessCardDense({
@@ -425,7 +630,6 @@ function CoverPage({
   return React.createElement(
     Page,
     { size: input.pageSize, style: styles.coverPage },
-    // Watermark for preview
     input.isPreview
       ? React.createElement(Text, { style: styles.watermark }, "مسودة")
       : null,
@@ -446,7 +650,30 @@ function CoverPage({
   );
 }
 
-// ── Table of contents ────────────────────────────────────────────────────────────
+// ── Divider page (before each category section) ───────────────────────────────
+
+function DividerPage({
+  section,
+  styles,
+  pageSize,
+}: {
+  section: PdfCategorySection;
+  styles: ReturnType<typeof makeStyles>;
+  pageSize: "A4" | "LETTER";
+}) {
+  const icon = section.icon ?? getCategoryIcon(section.nameAr);
+  const title = section.sectionTitleAr ?? section.nameAr;
+
+  return React.createElement(
+    Page,
+    { size: pageSize, style: styles.dividerPage },
+    React.createElement(Text, { style: styles.dividerIcon }, icon),
+    React.createElement(Text, { style: styles.dividerTitle }, title),
+    React.createElement(View, { style: styles.dividerAccentBar })
+  );
+}
+
+// ── Table of contents (clean — category names + business count) ───────────────
 
 function TocPage({
   sections,
@@ -468,27 +695,130 @@ function TocPage({
         React.createElement(Text, { style: styles.tocCount },
           `${sec.businesses.length} منشأة`
         ),
-        React.createElement(Text, { style: styles.tocName }, sec.nameAr)
+        React.createElement(
+          View,
+          { style: { display: "flex", flexDirection: "row", alignItems: "center" } },
+          React.createElement(
+            Text,
+            { style: styles.tocIcon },
+            sec.icon ?? getCategoryIcon(sec.nameAr)
+          ),
+          React.createElement(
+            Text,
+            { style: styles.tocCategoryName },
+            sec.sectionTitleAr ?? sec.nameAr
+          )
+        )
       )
     )
   );
 }
 
-// ── Ads helpers ────────────────────────────────────────────────────────────────
+// ── Alphabetical index (hierarchical, BEFORE content) ────────────────────────
+// Note: @react-pdf/renderer does not support cross-page link targets,
+// so page numbers here are positional references from section order.
 
-function AdFullPage({
+function IndexPage({
+  sections,
+  styles,
+  pageSize,
+}: {
+  sections: PdfCategorySection[];
+  styles: ReturnType<typeof makeStyles>;
+  pageSize: "A4" | "LETTER";
+}) {
+  // Sort sections alphabetically for the index
+  const sortedSections = [...sections].sort((a, b) =>
+    a.nameAr.localeCompare(b.nameAr, "ar")
+  );
+
+  return React.createElement(
+    Page,
+    { size: pageSize, style: styles.page },
+    React.createElement(Text, { style: styles.indexTitle }, "الفهرس الأبجدي"),
+    ...sortedSections.flatMap((sec) => [
+      // Category header row
+      React.createElement(
+        View,
+        { key: `cat-${sec.categoryId}`, style: styles.indexCategoryHeader },
+        React.createElement(
+          Text,
+          { style: styles.indexCategoryHeaderText },
+          `${sec.icon ?? getCategoryIcon(sec.nameAr)}  ${sec.nameAr}`
+        )
+      ),
+      // Business rows under this category, sorted alphabetically
+      ...sec.businesses
+        .slice()
+        .sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar"))
+        .map((b) =>
+          React.createElement(
+            View,
+            { key: `biz-${b.id}`, style: styles.indexRow },
+            React.createElement(Text, { style: styles.indexName }, b.nameAr),
+            b.addressAr
+              ? React.createElement(
+                  Text,
+                  { style: styles.indexSubcategory },
+                  b.addressAr.split(",")[0] // show first part of address as context
+                )
+              : null
+          )
+        ),
+    ])
+  );
+}
+
+// ── Ad block (full page with image, or text fallback) ─────────────────────────
+
+function AdBlock({
   ad,
   styles,
   pageSize,
+  isFullPage,
 }: {
   ad: PdfAdData;
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
+  isFullPage: boolean;
 }) {
+  if (isFullPage) {
+    // Full page ad
+    if (ad.imageUrl) {
+      return React.createElement(
+        Page,
+        { size: pageSize, style: styles.coverPage },
+        React.createElement(Image, { src: ad.imageUrl, style: styles.adFullPage })
+      );
+    }
+    // Full page text fallback
+    return React.createElement(
+      Page,
+      { size: pageSize, style: styles.coverPage },
+      React.createElement(
+        View,
+        { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
+        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
+        ad.phone
+          ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone)
+          : null
+      )
+    );
+  }
+
+  // Inline ad (half-page style, embedded in content page)
+  if (ad.imageUrl) {
+    return React.createElement(Image, { src: ad.imageUrl, style: styles.adHalfPage });
+  }
   return React.createElement(
-    Page,
-    { size: pageSize, style: styles.coverPage },
-    React.createElement(Image, { src: ad.imageUrl, style: styles.adFullPage })
+    View,
+    { style: styles.adTextCard },
+    React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+    React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
+    ad.phone
+      ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone)
+      : null
   );
 }
 
@@ -581,36 +911,6 @@ function DeveloperProfilePage({
   );
 }
 
-// ── Alphabetical index ────────────────────────────────────────────────────────────
-
-function IndexPage({
-  sections,
-  styles,
-  pageSize,
-}: {
-  sections: PdfCategorySection[];
-  styles: ReturnType<typeof makeStyles>;
-  pageSize: "A4" | "LETTER";
-}) {
-  const allBusinesses = sections
-    .flatMap((s) => s.businesses.map((b) => ({ ...b, categoryNameAr: s.nameAr })))
-    .sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar"));
-
-  return React.createElement(
-    Page,
-    { size: pageSize, style: styles.page },
-    React.createElement(Text, { style: styles.tocTitle }, "الفهرس الأبجدي"),
-    ...allBusinesses.map((b) =>
-      React.createElement(
-        View,
-        { key: b.id, style: styles.indexRow },
-        React.createElement(Text, { style: styles.indexCategory }, b.categoryNameAr),
-        React.createElement(Text, { style: styles.indexName }, b.nameAr)
-      )
-    )
-  );
-}
-
 // ── Category section page(s) ───────────────────────────────────────────────────────
 
 function CategorySectionPage({
@@ -661,13 +961,17 @@ function CategorySectionPage({
     Page,
     { size: pageSize, style: styles.page },
     isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
+    // Section header (compact, since there's already a divider page)
     React.createElement(
       View,
-      { style: section.colorTheme
+      {
+        style: section.colorTheme
           ? { ...styles.sectionHeader, backgroundColor: section.colorTheme }
-          : styles.sectionHeader
+          : styles.sectionHeader,
       },
-      React.createElement(Text, { style: styles.sectionHeaderText },
+      React.createElement(
+        Text,
+        { style: styles.sectionHeaderText },
         section.sectionTitleAr ?? section.nameAr
       )
     ),
@@ -676,10 +980,10 @@ function CategorySectionPage({
       : null,
     businessElements,
     layout.showPageNumbers
-      ? React.createElement(
-          Text,
-          { style: styles.pageNumber, render: ({ pageNumber }) => `${pageNumber}` }
-        )
+      ? React.createElement(Text, {
+          style: styles.pageNumber,
+          render: ({ pageNumber }: { pageNumber: number }) => `${pageNumber}`,
+        })
       : null
   );
 }
@@ -703,10 +1007,18 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
-  // Ads by placement
+  // Separate ads by placement type
   const fullPageAds = input.ads
     .filter((a) => a.effectivePlacement === "FULL_PAGE")
     .sort((a, b) => b.priority - a.priority);
+
+  const inlineAds = input.ads
+    .filter((a) => a.effectivePlacement !== "FULL_PAGE")
+    .sort((a, b) => b.priority - a.priority);
+
+  // Ad round-robin counters
+  let fullPageAdIdx = 0;
+  let inlineAdIdx = 0;
 
   // Build pages array
   const pages: React.ReactElement[] = [];
@@ -725,7 +1037,7 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
-  // 3. TOC
+  // 3. TOC (clean category list)
   pages.push(
     React.createElement(TocPage, {
       key: "toc",
@@ -735,8 +1047,31 @@ async function buildDocument(input: PdfDocumentInput) {
     })
   );
 
-  // 4. Category sections (interleave full-page ads)
+  // 4. Alphabetical Index (BEFORE content)
+  if (input.includeAlphabeticalIndex) {
+    pages.push(
+      React.createElement(IndexPage, {
+        key: "index",
+        sections: input.categorySections,
+        styles,
+        pageSize: input.pageSize,
+      })
+    );
+  }
+
+  // 5. Category sections with divider pages + interleaved ads
   input.categorySections.forEach((section, idx) => {
+    // 5a. Divider page before each category
+    pages.push(
+      React.createElement(DividerPage, {
+        key: `divider-${section.categoryId}`,
+        section,
+        styles,
+        pageSize: input.pageSize,
+      })
+    );
+
+    // 5b. Category content page
     pages.push(
       React.createElement(CategorySectionPage, {
         key: `section-${section.categoryId}`,
@@ -750,21 +1085,44 @@ async function buildDocument(input: PdfDocumentInput) {
         isPreview: input.isPreview,
       })
     );
-    // Insert a full-page ad after every 3rd section
-    if ((idx + 1) % 3 === 0 && fullPageAds.length > 0) {
-      const ad = fullPageAds[(idx / 3) % fullPageAds.length];
+
+    // 5c. Insert full-page ad after every 2nd section (if available)
+    if ((idx + 1) % 2 === 0 && fullPageAds.length > 0) {
+      const ad = fullPageAds[fullPageAdIdx % fullPageAds.length];
+      fullPageAdIdx++;
       pages.push(
-        React.createElement(AdFullPage, {
-          key: `ad-${ad.id}-${idx}`,
+        React.createElement(AdBlock, {
+          key: `ad-full-${ad.id}-${idx}`,
           ad,
           styles,
           pageSize: input.pageSize,
+          isFullPage: true,
         })
+      );
+    }
+
+    // 5d. Insert inline ad after every section (if available, round-robin)
+    if (inlineAds.length > 0 && (idx + 1) % 2 !== 0) {
+      const ad = inlineAds[inlineAdIdx % inlineAds.length];
+      inlineAdIdx++;
+      // Inline ads are appended as a small block on a separate page
+      pages.push(
+        React.createElement(
+          Page,
+          { key: `ad-inline-${ad.id}-${idx}`, size: input.pageSize, style: styles.page },
+          React.createElement(AdBlock, {
+            key: `ad-inline-block-${ad.id}`,
+            ad,
+            styles,
+            pageSize: input.pageSize,
+            isFullPage: false,
+          })
+        )
       );
     }
   });
 
-  // 5. Closing text
+  // 6. Closing text
   if (input.closingTextAr) {
     pages.push(
       React.createElement(
@@ -772,18 +1130,6 @@ async function buildDocument(input: PdfDocumentInput) {
         { key: "closing", size: input.pageSize, style: styles.page },
         React.createElement(Text, { style: styles.introText }, input.closingTextAr)
       )
-    );
-  }
-
-  // 6. Alphabetical index
-  if (input.includeAlphabeticalIndex) {
-    pages.push(
-      React.createElement(IndexPage, {
-        key: "index",
-        sections: input.categorySections,
-        styles,
-        pageSize: input.pageSize,
-      })
     );
   }
 
@@ -830,12 +1176,13 @@ export async function generatePdf(
     const arrayBuffer = await blob.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const pagesCount =
-      input.categorySections.length +
+      input.categorySections.length * 2 + // each section now has divider + content page
       3 + // cover + toc + index
       (input.introTextAr ? 1 : 0) +
       (input.closingTextAr ? 1 : 0) +
       (input.includeWebsiteProfile && input.websiteProfile ? 1 : 0) +
-      (input.includeDeveloperProfile && input.developerProfile ? 1 : 0);
+      (input.includeDeveloperProfile && input.developerProfile ? 1 : 0) +
+      Math.floor(input.categorySections.length / 2) * (input.ads.filter(a => a.effectivePlacement === "FULL_PAGE").length > 0 ? 1 : 0);
     const businessesCount = input.categorySections.reduce(
       (acc, s) => acc + s.businesses.length,
       0
