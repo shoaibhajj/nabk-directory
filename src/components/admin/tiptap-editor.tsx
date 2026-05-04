@@ -1,7 +1,7 @@
 "use client";
 /**
  * TiptapEditor — Rich text editor for Arabic/RTL content.
- * RTL is set via editorProps.attributes.dir — no extra extension needed.
+ * immediatelyRender: false — required to avoid SSR hydration mismatch in Next.js.
  */
 
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -37,6 +37,7 @@ export function TiptapEditor({
   };
 
   const editor = useEditor({
+    immediatelyRender: false, // ✔ prevents SSR/hydration mismatch in Next.js
     extensions: [StarterKit, Underline],
     content: parseDefault(),
     editorProps: {
