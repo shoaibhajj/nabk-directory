@@ -22,7 +22,7 @@ export default async function globalSetup() {
   const replitDomain = process.env.REPLIT_DEV_DOMAIN;
   const baseURL =
     process.env.E2E_BASE_URL ??
-    (replitDomain ? `https://${replitDomain}` : "http://localhost:5000");
+    (replitDomain ? `https://${replitDomain}` : "http://localhost:3000");
 
   if (!process.env.DATABASE_URL) {
     throw new Error(

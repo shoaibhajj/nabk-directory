@@ -9,6 +9,7 @@
 
 import { auth } from "@/lib/auth";
 import type { Role } from "@prisma/client";
+import { redirect } from "next/navigation";
 
 const ADMIN_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
 
@@ -20,10 +21,10 @@ const ADMIN_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
 export async function requireAdmin() {
   const session = await auth();
   if (!session?.user?.id) {
-    throw new Error("يجب تسجيل الدخول أولاً");
+  redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
   }
   if (!ADMIN_ROLES.includes(session.user.role)) {
-    throw new Error("غير مصرح لك بهذا الإجراء");
+      redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
   }
   return session;
 }
@@ -34,7 +35,7 @@ export async function requireAdmin() {
 export async function requireSuperAdmin() {
   const session = await auth();
   if (!session?.user?.id) {
-    throw new Error("يجب تسجيل الدخول أولاً");
+     redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
   }
   if (session.user.role !== "SUPER_ADMIN") {
     throw new Error("هذا الإجراء متاح للمسؤول الأعلى فقط");
@@ -49,7 +50,7 @@ export async function requireSuperAdmin() {
 export async function requireAuth() {
   const session = await auth();
   if (!session?.user?.id) {
-    throw new Error("يجب تسجيل الدخول أولاً");
+     redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
   }
   return session;
 }

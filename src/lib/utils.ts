@@ -13,5 +13,5 @@ export function getAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0];
   if (replitDomain) return `https://${replitDomain}`;
-  return "http://localhost:5000";
+  return "http://localhost3000:";
 }

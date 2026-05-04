@@ -22,7 +22,11 @@ export function BusinessCard({ business }: { business: CardData }) {
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
       <CardContent className="flex flex-1 flex-col gap-3 p-5">
+        
         <div className="flex items-start justify-between gap-3">
+             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent">
+              <CategoryIcon className="h-5 w-5" />
+            </div>
           <div className="flex-1 min-w-0">
             <Link
               href={`/businesses/${business.slug}`}
@@ -42,9 +46,7 @@ export function BusinessCard({ business }: { business: CardData }) {
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent">
-              <CategoryIcon className="h-5 w-5" />
-            </div>
+         
             {business.ratingCount > 0 && (
               <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
                 <Star className="h-3.5 w-3.5 fill-[var(--color-star)] text-[var(--color-star)]" />

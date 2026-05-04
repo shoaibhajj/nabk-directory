@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
       allowedOrigins: [
         "**.replit.app",
         "**.replit.dev",
-        "localhost:5000",
+        "localhost:3000",
       ],
     },
   },
