@@ -9,9 +9,15 @@ type NavItem = { href: string; label: string; superAdminOnly?: boolean };
 const NAV: NavItem[] = [
   { href: "/admin", label: "نظرة عامة" },
   { href: "/admin/businesses", label: "الأعمال" },
+  { href: "/admin/moderation", label: "المراجعة" },
   { href: "/admin/comments", label: "التعليقات" },
   { href: "/admin/contact-messages", label: "رسائل التواصل" },
   { href: "/admin/categories", label: "التصنيفات" },
+  // PDF section
+  { href: "/admin/pdf/editions", label: "إصدارات PDF" },
+  { href: "/admin/pdf/ads", label: "إعلانات PDF" },
+  { href: "/admin/pdf/profiles", label: "بلوكات التعريف" },
+  // Super admin only
   { href: "/admin/users", label: "المستخدمون", superAdminOnly: true },
   { href: "/admin/places", label: "البلدان والمدن", superAdminOnly: true },
   { href: "/admin/audit", label: "سجل التدقيق" },
