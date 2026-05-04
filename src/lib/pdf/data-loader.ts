@@ -1,11 +1,9 @@
 /**
  * Loads all data needed for PDF generation from the database.
- * Returns a fully-populated PdfDocumentInput ready for generatePdf().
  *
- * Multi-city fix:
- * - PdfEdition.cityIdsJson stores JSON array of all selected city IDs
- * - Falls back to single cityId for backwards compat
- * - businesses are loaded with cityId: { in: cityIds }
+ * Ads fix: we load ALL active PdfAd records (not just edition-linked ones).
+ * Edition-linked ads (editionAds) take priority and can override placement.
+ * Standalone active ads are appended if not already included.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -28,7 +26,7 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
-/** Extract plain text from Tiptap JSON (for react-pdf which can't render HTML) */
+/** Extract plain text from Tiptap JSON */
 export function tiptapToPlainText(json: unknown): string {
   if (!json || typeof json !== "object") return String(json ?? "");
   const node = json as { type?: string; text?: string; content?: unknown[] };
@@ -41,14 +39,12 @@ export function tiptapToPlainText(json: unknown): string {
   return "";
 }
 
-/** Parse a field that may be Tiptap JSON string or plain text */
 function parseRichText(value: string | null | undefined): string {
   if (!value) return "";
   try {
     const parsed = JSON.parse(value);
     return tiptapToPlainText(parsed);
   } catch {
-    // Not JSON — plain text or legacy HTML
     return value.replace(/<[^>]+>/g, "").trim();
   }
 }
@@ -57,7 +53,7 @@ export async function loadPdfEditionData(
   editionId: string,
   isPreview = false
 ): Promise<PdfDocumentInput> {
-  // ─ 1. Load edition with all relations
+  // ─ 1. Load edition
   const edition = await prisma.pdfEdition.findUniqueOrThrow({
     where: { id: editionId },
     include: {
@@ -74,25 +70,22 @@ export async function loadPdfEditionData(
     },
   });
 
-  // ─ 2. Resolve city IDs (multi-city support)
-  // cityIdsJson stores ["id1", "id2", ...] — falls back to single cityId
+  // ─ 2. City IDs
   let cityIds: string[] = [edition.cityId];
   if (edition.cityIdsJson) {
     try {
       const parsed = JSON.parse(edition.cityIdsJson as string);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        cityIds = parsed as string[];
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) cityIds = parsed as string[];
     } catch { /* keep fallback */ }
   }
 
-  // ─ 3. Build category filter
+  // ─ 3. Category filter
   const targetCategoryIds =
     edition.generationMode === "SELECTED_CATEGORIES"
       ? edition.categories.map((c) => c.categoryId)
       : undefined;
 
-  // ─ 4. Load businesses from ALL selected cities
+  // ─ 4. Businesses
   const businesses = await prisma.businessProfile.findMany({
     where: {
       cityId: cityIds.length === 1 ? cityIds[0] : { in: cityIds },
@@ -122,10 +115,8 @@ export async function loadPdfEditionData(
     businessesByCategory.set(biz.categoryId, list);
   }
 
-  // ─ 6. Build category configs
-  const editionCatMap = new Map(
-    edition.categories.map((ec) => [ec.categoryId, ec])
-  );
+  // ─ 6. Category configs
+  const editionCatMap = new Map(edition.categories.map((ec) => [ec.categoryId, ec]));
   const allCategoryIds = [...businessesByCategory.keys()];
   const extraCategoryIds = allCategoryIds.filter((id) => !editionCatMap.has(id));
   const extraCategories =
@@ -179,18 +170,50 @@ export async function loadPdfEditionData(
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 7. Build ads
-  const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
-    id: ea.ad.id,
-    titleAr: ea.ad.titleAr,
-    advertiserName: ea.ad.advertiserName,
-    imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
-    targetUrl: ea.ad.targetUrl,
-    phone: ea.ad.phone,
-    placementType: ea.ad.placementType,
-    priority: ea.ad.priority,
-    effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
-  }));
+  // ─ 7. Ads — edition-linked take priority, then ALL active standalone ads
+  //
+  // Problem: admins create ads in /admin/pdf/ads but never link them to an edition.
+  // Solution: load all active PdfAds and merge, deduplicating by id.
+  const allActiveAds = await prisma.pdfAd.findMany({
+    where: { isActive: true },
+    orderBy: { priority: "desc" },
+  });
+
+  // Build a map from edition-linked ads (these may have overridePlacement)
+  const editionAdMap = new Map(
+    edition.editionAds.map((ea) => [
+      ea.ad.id,
+      {
+        id: ea.ad.id,
+        titleAr: ea.ad.titleAr,
+        advertiserName: ea.ad.advertiserName,
+        imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
+        targetUrl: ea.ad.targetUrl,
+        phone: ea.ad.phone,
+        placementType: ea.ad.placementType,
+        priority: ea.ad.priority,
+        effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
+      } as PdfAdData,
+    ])
+  );
+
+  // Merge: start with edition-linked, then append any active ads not yet included
+  const ads: PdfAdData[] = [
+    ...editionAdMap.values(),
+    ...allActiveAds
+      .filter((a) => !editionAdMap.has(a.id))
+      .map((a) => ({
+        id: a.id,
+        titleAr: a.titleAr,
+        advertiserName: a.advertiserName,
+        imageUrl: resolveAssetUrl(a.imageUrl) ?? "",
+        targetUrl: a.targetUrl,
+        phone: a.phone,
+        placementType: a.placementType,
+        priority: a.priority,
+        effectivePlacement: a.placementType, // no override for standalone ads
+      } as PdfAdData)),
+  ];
 
   // ─ 8. Profile blocks
   const websiteProfile = edition.includeWebsiteProfile
@@ -200,7 +223,7 @@ export async function loadPdfEditionData(
     ? await prisma.developerProfileBlock.findFirst({ where: { isVisible: true } })
     : null;
 
-  // ─ 9. Parse JSON config blobs
+  // ─ 9. Config blobs
   const theme: PdfTheme = edition.themeJson
     ? { ...DEFAULT_THEME, ...(edition.themeJson as object) }
     : DEFAULT_THEME;
@@ -211,7 +234,7 @@ export async function loadPdfEditionData(
     ? { ...DEFAULT_LAYOUT, ...(edition.layoutJson as object) }
     : DEFAULT_LAYOUT;
 
-  // ─ 10. Assemble — parse rich text fields before returning
+  // ─ 10. Assemble
   return {
     editionId: edition.id,
     editionSlug: edition.slug,
