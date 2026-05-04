@@ -124,6 +124,12 @@ export interface PdfAdData {
   priority: number;
   /** Set when overridePlacement is used in PdfEditionAd */
   effectivePlacement: PdfAdPlacementType;
+  /**
+   * Task-4: optional category ID.
+   * When provided, the generator pins this ad immediately after that
+   * category's section pages instead of distributing it round-robin.
+   */
+  positionAfterCategoryId?: string | null;
 }
 
 // ── Profile blocks ──────────────────────────────────────────────────────────

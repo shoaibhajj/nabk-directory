@@ -17,9 +17,8 @@ export async function createPdfEdition(formData: FormData) {
   const editionNumber  = Number(formData.get("editionNumber") ?? 1);
   const generationMode = (formData.get("generationMode") as string) ?? "ALL_ACTIVE";
 
-  // Multi-city: collect all checked cityIds
   const cityIds = (formData.getAll("cityIds") as string[]).filter(Boolean);
-  const cityId  = cityIds[0] ?? ""; // primary city (required by schema)
+  const cityId  = cityIds[0] ?? "";
 
   if (!titleAr?.trim() || !slug?.trim() || !cityId) {
     throw new Error("حقول العنوان والمسار والمدينة مطلوبة");
@@ -30,7 +29,6 @@ export async function createPdfEdition(formData: FormData) {
       titleAr:         titleAr.trim(),
       slug:            slug.trim(),
       cityId,
-      // Store full city list as JSON for multi-city data-loader
       cityIdsJson:     JSON.stringify(cityIds),
       pageSize,
       editionNumber,
@@ -38,7 +36,6 @@ export async function createPdfEdition(formData: FormData) {
       status:          "DRAFT",
       coverTitleAr:    (formData.get("coverTitleAr") as string) || null,
       coverSubtitleAr: (formData.get("coverSubtitleAr") as string) || null,
-      // Tiptap JSON strings (or plain text) — stored as-is, parsed at generation time
       introTextAr:     (formData.get("introTextAr") as string) || null,
       editorialTextAr: (formData.get("editorialTextAr") as string) || null,
       closingTextAr:   (formData.get("closingTextAr") as string) || null,
@@ -168,6 +165,9 @@ export async function createPdfAd(formData: FormData) {
     ? (rawPlacement as PdfAdPlacementType)
     : PdfAdPlacementType.FULL_PAGE;
 
+  const positionAfterCategoryId =
+    (formData.get("positionAfterCategoryId") as string) || null;
+
   const ad = await prisma.pdfAd.create({
     data: {
       titleAr:        formData.get("titleAr") as string,
@@ -176,8 +176,9 @@ export async function createPdfAd(formData: FormData) {
       targetUrl:      (formData.get("targetUrl") as string) || null,
       phone:          (formData.get("phone") as string) || null,
       placementType,
-      priority: Number(formData.get("priority") ?? 0),
-      isActive: true,
+      priority:       Number(formData.get("priority") ?? 0),
+      isActive:       true,
+      positionAfterCategoryId,
     },
   });
 
@@ -189,7 +190,7 @@ export async function createPdfAd(formData: FormData) {
       action:     AuditAction.PDF_AD_CREATED,
       entityType: "PdfAd",
       entityId:   ad.id,
-      newValues:  { titleAr: ad.titleAr, placementType },
+      newValues:  { titleAr: ad.titleAr, placementType, positionAfterCategoryId },
     },
   });
 
@@ -207,6 +208,9 @@ export async function updatePdfAd(adId: string, formData: FormData) {
     ? (rawPlacement as PdfAdPlacementType)
     : PdfAdPlacementType.FULL_PAGE;
 
+  const positionAfterCategoryId =
+    (formData.get("positionAfterCategoryId") as string) || null;
+
   const ad = await prisma.pdfAd.update({
     where: { id: adId },
     data: {
@@ -216,7 +220,8 @@ export async function updatePdfAd(adId: string, formData: FormData) {
       targetUrl:      (formData.get("targetUrl") as string) || null,
       phone:          (formData.get("phone") as string) || null,
       placementType,
-      priority: Number(formData.get("priority") ?? 0),
+      priority:       Number(formData.get("priority") ?? 0),
+      positionAfterCategoryId,
     },
   });
 
@@ -228,7 +233,7 @@ export async function updatePdfAd(adId: string, formData: FormData) {
       action:     AuditAction.PDF_AD_UPDATED,
       entityType: "PdfAd",
       entityId:   adId,
-      newValues:  { titleAr: ad.titleAr, placementType, priority: ad.priority },
+      newValues:  { titleAr: ad.titleAr, placementType, priority: ad.priority, positionAfterCategoryId },
     },
   });
 

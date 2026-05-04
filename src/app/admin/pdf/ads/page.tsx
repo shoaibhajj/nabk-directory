@@ -1,7 +1,6 @@
 /**
- * /admin/pdf/ads — Round 2 CRUD
- * Pure Server Component — no client handlers anywhere.
- * Delete confirmation lives in DeleteAdButton (Client Component).
+ * /admin/pdf/ads — Ads CRUD with Task-4 category pin support
+ * Pure Server Component.
  */
 
 import { requireAdmin } from "@/lib/auth-guards";
@@ -27,15 +26,50 @@ const PLACEMENT_LABELS: Record<string, string> = {
 export default async function PdfAdsPage() {
   await requireAdmin("/admin/pdf/ads");
 
-  const ads = await prisma.pdfAd.findMany({
-    orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-  });
+  const [ads, categories] = await Promise.all([
+    prisma.pdfAd.findMany({
+      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+      include: { positionAfterCategory: { select: { id: true, nameAr: true } } },
+    }),
+    prisma.category.findMany({
+      where: { isActive: true, parentId: null },
+      orderBy: { nameAr: "asc" },
+      select: { id: true, nameAr: true },
+    }),
+  ]);
+
+  // ── Category selector shared markup helper ──────────────────────────────
+  function CategorySelect({
+    name,
+    defaultValue,
+  }: {
+    name: string;
+    defaultValue?: string | null;
+  }) {
+    return (
+      <select
+        name={name}
+        defaultValue={defaultValue ?? ""}
+        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+      >
+        <option value="">— توزيع تلقائي —</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.nameAr}
+          </option>
+        ))}
+      </select>
+    );
+  }
 
   return (
     <main className="container mx-auto px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold">إعلانات PDF</h1>
+      <h1 className="mb-2 text-2xl font-bold">إعلانات PDF</h1>
+      <p className="mb-6 text-sm text-muted-foreground">
+        يمكنك تثبيت الإعلان بعد تصنيف معين، أو تركه فارغاً للتوزيع التلقائي.
+      </p>
 
-      {/* Create form */}
+      {/* ── Create form ───────────────────────────────────────────────────── */}
       <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
         <h2 className="mb-4 text-lg font-semibold">إضافة إعلان جديد</h2>
         <form action={createPdfAd} className="grid gap-4 sm:grid-cols-2">
@@ -68,6 +102,14 @@ export default async function PdfAdsPage() {
             <input id="priority" name="priority" type="number" defaultValue={0} min={0} max={100}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
           </div>
+          {/* Task-4: category pin */}
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold">
+              📌 تثبيت بعد تصنيف
+              <span className="mr-1 font-normal text-muted-foreground">(اختياري — يظهر الإعلان مباشرة بعد صفحات هذا التصنيف)</span>
+            </label>
+            <CategorySelect name="positionAfterCategoryId" />
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="targetUrl">رابط المعلن (اختياري)</label>
             <input id="targetUrl" name="targetUrl" dir="ltr" placeholder="https://..."
@@ -87,7 +129,7 @@ export default async function PdfAdsPage() {
         </form>
       </div>
 
-      {/* Ads list */}
+      {/* ── Ads list ──────────────────────────────────────────────────────── */}
       {ads.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">
           <p className="text-lg font-semibold">لا توجد إعلانات بعد.</p>
@@ -98,7 +140,7 @@ export default async function PdfAdsPage() {
           {ads.map((ad) => (
             <div key={ad.id} className="rounded-xl border border-border bg-secondary/20">
 
-              {/* Card header: image + badges */}
+              {/* Card header */}
               <div className="flex items-start gap-4 p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={ad.imageUrl} alt={ad.titleAr}
@@ -119,13 +161,23 @@ export default async function PdfAdsPage() {
                     <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-xs font-semibold">
                       أولوية: {ad.priority}
                     </span>
+                    {/* Task-4: show pin badge */}
+                    {ad.positionAfterCategory ? (
+                      <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-semibold">
+                        📌 بعد: {ad.positionAfterCategory.nameAr}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-secondary/60 text-muted-foreground px-2 py-0.5 text-xs">
+                        توزيع تلقائي
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{ad.advertiserName}</p>
                   {ad.phone && <p className="text-xs text-muted-foreground" dir="ltr">{ad.phone}</p>}
                 </div>
               </div>
 
-              {/* Edit form (collapsible via <details>) */}
+              {/* Edit form (collapsible) */}
               <details className="group border-t border-border">
                 <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-accent
                   hover:bg-secondary/40 list-none flex items-center gap-2">
@@ -164,6 +216,16 @@ export default async function PdfAdsPage() {
                     <input name="priority" type="number" defaultValue={ad.priority} min={0} max={100}
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
                   </div>
+                  {/* Task-4: category pin */}
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold">
+                      📌 تثبيت بعد تصنيف
+                    </label>
+                    <CategorySelect
+                      name="positionAfterCategoryId"
+                      defaultValue={ad.positionAfterCategoryId}
+                    />
+                  </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold">رابط المعلن</label>
                     <input name="targetUrl" defaultValue={ad.targetUrl ?? ""} dir="ltr"
@@ -187,7 +249,6 @@ export default async function PdfAdsPage() {
 
               {/* Actions row */}
               <div className="flex items-center gap-3 border-t border-border px-4 py-3">
-                {/* Toggle active — pure Server Action */}
                 <form action={togglePdfAdActive.bind(null, ad.id)}>
                   <button type="submit"
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
@@ -198,8 +259,6 @@ export default async function PdfAdsPage() {
                     {ad.isActive ? "⛔ إيقاف" : "✅ تفعيل"}
                   </button>
                 </form>
-
-                {/* Delete — Client Component handles confirm() */}
                 <div className="mr-auto">
                   <DeleteAdButton adId={ad.id} adTitle={ad.titleAr} />
                 </div>

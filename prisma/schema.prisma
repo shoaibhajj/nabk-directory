@@ -254,7 +254,7 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id])
 
   @@unique([provider, providerAccountId])
   @@map("oauth_accounts")
@@ -462,10 +462,8 @@ model WorkingHours {
   isOpen            Boolean         @default(true)
   openTime          String?
   closeTime         String?
-  is24Hours         Boolean         @default(false)
   business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
 
-  @@unique([businessProfileId, dayOfWeek])
   @@map("working_hours")
 }
 
@@ -482,190 +480,156 @@ model SocialLink {
 model MediaFile {
   id                String          @id @default(cuid())
   businessProfileId String
-  uploadedById      String
   type              MediaType
-  storageKey        String
+  status            MediaStatus     @default(PENDING)
   url               String
-  thumbnailUrl      String?
-  fileSize          Int?
-  mimeType          String?
-  width             Int?
-  height            Int?
-  duration          Int?
-  status            MediaStatus     @default(APPROVED)
-  rejectionReason   String?
+  publicId          String?
+  caption           String?
   displayOrder      Int             @default(0)
   createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   business          BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
 
   @@map("media_files")
 }
 
-model Notification {
-  id                String   @id @default(cuid())
-  userId            String
-  type              String
-  titleAr           String
-  messageAr         String
-  isRead            Boolean  @default(false)
-  relatedEntityType String?
-  relatedEntityId   String?
-  createdAt         DateTime @default(now())
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("notifications")
-}
-
 model AuditLog {
-  id             String      @id @default(cuid())
-  actorId        String?
-  actorEmail     String?
-  actorRole      Role?
-  action         AuditAction
-  entityType     String
-  entityId       String
-  previousValues Json?
-  newValues      Json?
-  ipAddress      String?
-  createdAt      DateTime    @default(now())
-  actor          User?       @relation(fields: [actorId], references: [id])
+  id          String      @id @default(cuid())
+  actorId     String
+  actorEmail  String
+  actorRole   Role
+  action      AuditAction
+  entityType  String
+  entityId    String
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+  actor       User        @relation(fields: [actorId], references: [id])
 
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
   @@map("audit_logs")
 }
 
-model PlatformSetting {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       String   @db.Text
-  description String?
-  updatedAt   DateTime @updatedAt
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  titleAr   String
+  bodyAr    String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("platform_settings")
+  @@index([userId, isRead])
+  @@map("notifications")
 }
 
 model ContactMessage {
   id          String               @id @default(cuid())
+  senderId    String?
   name        String
   email       String
-  subject     String?
-  message     String               @db.Text
+  subject     String
+  body        String               @db.Text
   status      ContactMessageStatus @default(NEW)
-  ipHash      String?
-  userAgent   String?
-  userId      String?
-  user        User?                @relation("ContactSender", fields: [userId], references: [id], onDelete: SetNull)
-  reply       String?              @db.Text
-  repliedAt   DateTime?
   repliedById String?
-  repliedBy   User?                @relation("ContactReplier", fields: [repliedById], references: [id], onDelete: SetNull)
+  repliedAt   DateTime?
+  replyBody   String?              @db.Text
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
+  sender      User?                @relation("ContactSender", fields: [senderId], references: [id])
+  repliedBy   User?                @relation("ContactReplier", fields: [repliedById], references: [id])
 
-  @@index([status, createdAt])
-  @@index([userId])
+  @@index([status, createdAt(sort: Desc)])
   @@map("contact_messages")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PDF SYSTEM — NEW MODELS
+// PDF SYSTEM MODELS
 // ─────────────────────────────────────────────────────────────────────────────
 
-model PdfLegacyFile {
-  id             String               @id @default(cuid())
-  titleAr        String
-  titleEn        String?
-  descriptionAr  String?              @db.Text
-  descriptionEn  String?              @db.Text
-  sourceType     PdfLegacySourceType
-  fileUrl        String?
-  externalUrl    String?
-  coverImageUrl  String?
-  buttonLabelAr  String               @default("الدليل القديم")
-  buttonLabelEn  String?              @default("Old Directory")
-  openMode       PdfLegacyOpenMode    @default(OPEN_IN_NEW_TAB)
-  isPublished    Boolean              @default(false)
-  publishedAt    DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+/// Singleton legacy PDF config (one per city or global)
+model LegacyPdfConfig {
+  id           String               @id @default(cuid())
+  cityId       String?              @unique
+  sourceType   PdfLegacySourceType  @default(EXTERNAL_URL)
+  fileUrl      String?              // Cloudinary / R2 URL when sourceType = FILE
+  externalUrl  String?              // direct external link when sourceType = EXTERNAL_URL
+  openMode     PdfLegacyOpenMode    @default(OPEN_IN_NEW_TAB)
+  isPublished  Boolean              @default(false)
+  publishedAt  DateTime?
+  updatedAt    DateTime             @updatedAt
+  createdAt    DateTime             @default(now())
 
-  @@map("pdf_legacy_files")
+  @@map("legacy_pdf_configs")
 }
 
+/// A generated directory edition
 model PdfEdition {
-  id                        String           @id @default(cuid())
+  id                        String          @id @default(cuid())
   cityId                    String
-  /// JSON array of all selected city IDs for multi-city editions
-  /// e.g. ["city-id-1", "city-id-2"]. Falls back to [cityId] if null.
-  cityIdsJson               String?          @db.Text
+  cityIdsJson               String          @default("[]")
+  slug                      String          @unique
   titleAr                   String
-  titleEn                   String?
-  slug                      String           @unique
-  editionNumber             Int              @default(1)
-  status                    PdfEditionStatus @default(DRAFT)
-
-  // ── Cover & intro copy ──────────────────────────────────────────────────
   coverTitleAr              String?
   coverSubtitleAr           String?
-  introTextAr               String?          @db.Text
-  editorialTextAr           String?          @db.Text
-  closingTextAr             String?          @db.Text
-
-  // ── Feature toggles ──────────────────────────────────────────────────────
-  includeAlphabeticalIndex  Boolean          @default(true)
-  includeBusinessLogos      Boolean          @default(false)
-  includeQrCodes            Boolean          @default(true)
-  includeFeaturedBusinesses Boolean          @default(true)
-  includeWebsiteProfile     Boolean          @default(true)
-  includeDeveloperProfile   Boolean          @default(false)
-  showEditionMetadata       Boolean          @default(true)
-
-  // ── Generation settings ──────────────────────────────────────────────────
-  generationMode            String           @default("FULL_CITY")
-  pageSize                  String           @default("A4")
-
-  // ── JSON blobs for flexible config ───────────────────────────────────────
-  marginsJson               Json?
-  themeJson                 Json?
-  layoutJson                Json?
-
-  // ── Output tracking ──────────────────────────────────────────────────────
+  introTextAr               String?         @db.Text
+  editorialTextAr           String?         @db.Text
+  closingTextAr             String?         @db.Text
+  editionNumber             Int             @default(1)
+  status                    PdfEditionStatus @default(DRAFT)
+  pageSize                  String          @default("A4")
+  generationMode            String          @default("ALL_ACTIVE")
+  themeJson                 String?         @db.Text
+  marginsJson               String?         @db.Text
+  layoutJson                String?         @db.Text
+  includeAlphabeticalIndex  Boolean         @default(true)
+  includeBusinessLogos      Boolean         @default(true)
+  includeQrCodes            Boolean         @default(true)
+  includeFeaturedBusinesses Boolean         @default(true)
+  includeWebsiteProfile     Boolean         @default(false)
+  includeDeveloperProfile   Boolean         @default(false)
+  showEditionMetadata       Boolean         @default(true)
+  generatedFileUrl          String?
+  generatedAt               DateTime?
   publishedAt               DateTime?
-  createdAt                 DateTime         @default(now())
-  updatedAt                 DateTime         @updatedAt
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 
-  city            City                 @relation(fields: [cityId], references: [id])
-  categories      PdfEditionCategory[]
-  editionAds      PdfEditionAd[]
-  generationJobs  PdfGenerationJob[]
+  city                City                 @relation(fields: [cityId], references: [id])
+  categories          PdfEditionCategory[]
+  ads                 PdfEditionAd[]
+  generationJobs      PdfGenerationJob[]
 
   @@index([cityId, status])
-  @@index([status, publishedAt])
   @@map("pdf_editions")
 }
 
+/// Junction: which categories are included in an edition, with per-section config
 model PdfEditionCategory {
-  id              String             @id @default(cuid())
-  pdfEditionId    String
-  categoryId      String
-  displayOrder    Int                @default(0)
-  startOnNewPage  Boolean            @default(true)
-  includeDivider  Boolean            @default(true)
-  colorTheme      String?
-  sectionTitleAr  String?
-  sectionIntroAr  String?            @db.Text
-  listingTemplate PdfListingTemplate @default(STANDARD)
-  sortMode        PdfSortMode        @default(ALPHABETICAL)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id               String           @id @default(cuid())
+  editionId        String
+  categoryId       String
+  displayOrder     Int              @default(0)
+  startOnNewPage   Boolean          @default(true)
+  sectionTitleAr   String?
+  sectionIntroAr   String?          @db.Text
+  colorTheme       String?
+  listingTemplate  PdfListingTemplate @default(STANDARD)
+  sortMode         PdfSortMode      @default(ALPHABETICAL)
 
-  edition  PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
-  category Category   @relation(fields: [categoryId], references: [id])
+  edition          PdfEdition       @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  category         Category         @relation(fields: [categoryId], references: [id])
 
-  @@unique([pdfEditionId, categoryId])
-  @@index([pdfEditionId, displayOrder])
+  @@unique([editionId, categoryId])
   @@map("pdf_edition_categories")
 }
 
+/// Ad asset — a reusable creative
 model PdfAd {
   id             String             @id @default(cuid())
   titleAr        String
@@ -673,110 +637,95 @@ model PdfAd {
   imageUrl       String
   targetUrl      String?
   phone          String?
-  categoryId     String?
-  placementType  PdfAdPlacementType
+  placementType  PdfAdPlacementType @default(FULL_PAGE)
   priority       Int                @default(0)
-  startsAt       DateTime?
-  endsAt         DateTime?
   isActive       Boolean            @default(true)
-  notes          String?            @db.Text
+
+  /// Task-4: pin this ad to appear after a specific category section.
+  /// When set, the generator places the ad immediately after that category's pages.
+  /// When null, the ad is distributed automatically (round-robin).
+  positionAfterCategoryId  String?   @map("position_after_category_id")
+  positionAfterCategory    Category? @relation(fields: [positionAfterCategoryId], references: [id], onDelete: SetNull)
+
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  category    Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  editionAds  PdfEditionAd[]
+  editions       PdfEditionAd[]
 
-  @@index([isActive, placementType])
-  @@index([categoryId, isActive])
+  @@index([isActive, priority(sort: Desc)])
+  @@index([positionAfterCategoryId])
   @@map("pdf_ads")
 }
 
+/// Junction: which ads appear in an edition, with optional placement override
 model PdfEditionAd {
   id                String              @id @default(cuid())
-  pdfEditionId      String
-  pdfAdId           String
-  displayOrder      Int                 @default(0)
+  editionId         String
+  adId              String
   overridePlacement PdfAdPlacementType?
+  displayOrder      Int                 @default(0)
 
-  edition PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
-  ad      PdfAd      @relation(fields: [pdfAdId], references: [id], onDelete: Cascade)
+  edition           PdfEdition          @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  ad                PdfAd               @relation(fields: [adId], references: [id], onDelete: Cascade)
 
-  @@unique([pdfEditionId, pdfAdId])
+  @@unique([editionId, adId])
   @@map("pdf_edition_ads")
 }
 
+/// Async generation job log
 model PdfGenerationJob {
-  id                   String       @id @default(cuid())
-  pdfEditionId         String
-  status               PdfJobStatus @default(QUEUED)
-  isPreview            Boolean      @default(false)
-  outputFileUrl        String?
-  previewFileUrl       String?
-  outputFileSizeBytes  Int?
-  previewFileSizeBytes Int?
-  pagesCount           Int?
-  businessesCount      Int?
-  categoriesCount      Int?
-  adsCount             Int?
-  errorMessage         String?      @db.Text
-  generatedAt          DateTime?
-  createdAt            DateTime     @default(now())
+  id            String        @id @default(cuid())
+  editionId     String
+  status        PdfJobStatus  @default(QUEUED)
+  triggeredById String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  errorMessage  String?       @db.Text
+  outputFileUrl String?
+  pagesCount    Int?
+  fileSizeBytes Int?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  edition PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
+  edition       PdfEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
-  @@index([pdfEditionId, status])
-  @@index([pdfEditionId, createdAt(sort: Desc)])
+  @@index([editionId, status])
   @@map("pdf_generation_jobs")
 }
 
+/// Website/directory profile block (shown at the end of the PDF)
 model WebsiteProfileBlock {
-  id              String   @id @default(cuid())
-  titleAr         String
-  titleEn         String?
-  shortTextAr     String?
-  shortTextEn     String?
-  bodyTextAr      String?  @db.Text
-  bodyTextEn      String?  @db.Text
-  websiteUrl      String?
-  qrCodeUrl       String?
-  supportEmail    String?
-  supportPhone    String?
-  socialLinksJson Json?
-  logoUrl         String?
-  bannerImageUrl  String?
-  ctaTextAr       String?
-  ctaTextEn       String?
-  isActive        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String   @id @default(cuid())
+  titleAr      String
+  shortTextAr  String?
+  bodyTextAr   String?  @db.Text
+  websiteUrl   String?
+  supportEmail String?
+  supportPhone String?
+  ctaTextAr    String?
+  logoUrl      String?
+  qrCodeUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("website_profile_blocks")
 }
 
+/// Developer/maintainer profile block (shown at the very end)
 model DeveloperProfileBlock {
-  id              String   @id @default(cuid())
-  fullName        String
-  roleTitleAr     String?
-  roleTitleEn     String?
-  shortBioAr      String?
-  shortBioEn      String?
-  longBioAr       String?  @db.Text
-  longBioEn       String?  @db.Text
-  brandName       String?
-  portfolioUrl    String?
-  githubUrl       String?
-  linkedinUrl     String?
-  email           String?
-  phone           String?
-  whatsapp        String?
-  socialLinksJson Json?
-  profileImageUrl String?
-  logoUrl         String?
-  ctaTextAr       String?
-  ctaTextEn       String?
-  isVisible       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  fullName         String
+  roleTitleAr      String?
+  shortBioAr       String?  @db.Text
+  portfolioUrl     String?
+  email            String?
+  phone            String?
+  profileImageUrl  String?
+  ctaTextAr        String?
+  isVisible        Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("developer_profile_blocks")
 }
