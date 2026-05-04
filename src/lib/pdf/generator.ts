@@ -1,13 +1,16 @@
 /**
  * PDF Generation Engine for دليل النبك.
  *
- * Changes in this revision:
- * - TOC (فهرس المحتوى) removed entirely
- * - Old flat IndexPage removed
- * - New PageNumberIndexPage: hierarchical (Category → Subcategory → business + page#)
- * - Categories sorted alphabetically by Arabic name (localeCompare ar)
- * - Businesses within each category sorted alphabetically by Arabic name
- * - Ads bug fixed: all active PdfAd records are injected regardless of edition link
+ * ✔ Index: page numbers on RIGHT side (RTL)
+ * ✔ Ad placement fully respected:
+ *   FULL_PAGE           → standalone page (full bleed image)
+ *   HALF_PAGE_TOP/BOTTOM→ half-height block on its own page
+ *   SIDEBAR_LEFT/RIGHT  → 2-column layout: businesses | ad strip
+ *   HEADER_BANNER       → thin banner at top of section page
+ *   FOOTER_BANNER       → thin banner at bottom of section page
+ *   CATEGORY_SPONSOR    → sponsor badge in the section header
+ * ✔ Task-4: positionAfterCategoryId on PdfAdData – ad appears after
+ *   the specified category section (falls back to round-robin if null)
  */
 
 import React from "react";
@@ -19,7 +22,6 @@ import {
   Image,
   StyleSheet,
   pdf,
-  Font,
 } from "@react-pdf/renderer";
 import QRCode from "qrcode";
 import { registerFonts } from "./fonts";
@@ -65,7 +67,7 @@ function getCategoryIcon(nameAr: string): string {
   return "📋";
 }
 
-// ── QR helper ─────────────────────────────────────────────────────────────────
+// ── QR ─────────────────────────────────────────────────────────────────────
 
 async function buildQrDataUrl(url: string): Promise<string> {
   return QRCode.toDataURL(url, {
@@ -76,7 +78,7 @@ async function buildQrDataUrl(url: string): Promise<string> {
   });
 }
 
-// ── Style factory ─────────────────────────────────────────────────────────────
+// ── Style factory ────────────────────────────────────────────────────────────
 
 function makeStyles(theme: PdfTheme, margins: PdfMargins) {
   return StyleSheet.create({
@@ -138,11 +140,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       justifyContent: "center",
       padding: 40,
     },
-    dividerIcon: {
-      fontSize: 64,
-      marginBottom: 24,
-      textAlign: "center",
-    },
+    dividerIcon: { fontSize: 64, marginBottom: 24, textAlign: "center" },
     dividerTitle: {
       fontFamily: "Cairo",
       fontSize: 42,
@@ -158,6 +156,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       backgroundColor: theme.accentColor,
       borderRadius: 2,
     },
+    // ── Section page layouts ──────────────────────────────────────────────
     sectionHeader: {
       backgroundColor: theme.primaryColor,
       paddingVertical: 10,
@@ -182,6 +181,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginBottom: 10,
       lineHeight: 1.6,
     },
+    // ── Business cards ────────────────────────────────────────────────────
     businessCard: {
       borderWidth: 1,
       borderColor: theme.borderColor,
@@ -253,18 +253,8 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       fontWeight: 700,
       color: theme.primaryColor,
     },
-    logoImage: {
-      width: 44,
-      height: 44,
-      objectFit: "contain",
-      borderRadius: 4,
-    },
-    denseGrid: {
-      display: "flex",
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 6,
-    },
+    logoImage: { width: 44, height: 44, objectFit: "contain", borderRadius: 4 },
+    denseGrid: { display: "flex", flexDirection: "row", flexWrap: "wrap", gap: 6 },
     denseCard: {
       width: "48%",
       borderWidth: 1,
@@ -282,9 +272,59 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
     },
     qrImage: { width: 52, height: 52 },
     businessInfo: { flex: 1, paddingRight: 8 },
-    adFullPage: { width: "100%", flex: 1 },
-    adHalfPage: { width: "100%", height: "45%" },
-    adImage: { width: "100%", height: "100%", objectFit: "contain" },
+    // ── Ad blocks — new structured placements ────────────────────────────
+    adFullPage:   { width: "100%", flex: 1, objectFit: "contain" },
+    adHalfBlock:  { width: "100%", height: 200 },
+    adSidebarCol: {
+      width: 90,
+      borderLeftWidth: 1,
+      borderLeftColor: theme.borderColor,
+      paddingLeft: 6,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+    },
+    adSidebarImg: { width: 78, height: 200, objectFit: "contain" },
+    adSidebarText: {
+      fontFamily: "Cairo",
+      fontSize: 8,
+      color: theme.textColor,
+      textAlign: "center",
+      direction: "rtl" as never,
+      marginTop: 4,
+    },
+    adBannerBlock: {
+      width: "100%",
+      height: 44,
+      backgroundColor: theme.sectionBgColor,
+      borderRadius: 4,
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 6,
+    },
+    adBannerImg: { width: "100%", height: 44, objectFit: "contain" },
+    adBannerText: {
+      fontFamily: "Cairo",
+      fontSize: 9,
+      color: theme.primaryColor,
+      fontWeight: 700,
+      textAlign: "center",
+    },
+    adSponsorBadge: {
+      backgroundColor: theme.accentColor,
+      borderRadius: 4,
+      paddingVertical: 2,
+      paddingHorizontal: 8,
+      marginRight: 8,
+    },
+    adSponsorText: {
+      fontFamily: "Cairo",
+      fontSize: 8,
+      color: "#ffffff",
+      direction: "rtl" as never,
+    },
     adTextCard: {
       borderWidth: 2,
       borderColor: theme.accentColor,
@@ -320,6 +360,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "ltr" as never,
       marginTop: 8,
     },
+    // ── Profile blocks ────────────────────────────────────────────────────
     profileBlock: {
       borderWidth: 1,
       borderColor: theme.borderColor,
@@ -353,7 +394,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "rtl" as never,
       marginTop: 4,
     },
-    // ── New Page-Number Index styles ─────────────────────────────────────────
+    // ── Index (page-number based) ─────────────────────────────────────────
     indexTitle: {
       fontFamily: "Cairo",
       fontSize: 22,
@@ -377,6 +418,16 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       borderRightWidth: 4,
       borderRightColor: theme.primaryColor,
     },
+    // page number on the RIGHT in RTL → we put it FIRST in flex-row
+    // because in RTL flex-row, the visual left is the logical end.
+    // Using flexDirection: row-reverse keeps Arabic text right + number right.
+    indexRowInner: {
+      display: "flex",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      width: "100%",
+    },
     indexCategoryName: {
       fontFamily: "Cairo",
       fontSize: 12,
@@ -389,10 +440,12 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
     indexPageNum: {
       fontFamily: "Cairo",
       fontSize: 10,
-      color: theme.mutedColor,
+      color: theme.primaryColor,
+      fontWeight: 700,
       direction: "ltr" as never,
-      minWidth: 24,
-      textAlign: "center",
+      minWidth: 22,
+      textAlign: "right",
+      marginLeft: 8,
     },
     indexBusinessRow: {
       display: "flex",
@@ -412,7 +465,16 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       flex: 1,
       textAlign: "right",
     },
-    // ── shared
+    indexBusinessPageNum: {
+      fontFamily: "Cairo",
+      fontSize: 9,
+      color: theme.mutedColor,
+      direction: "ltr" as never,
+      minWidth: 22,
+      textAlign: "right",
+      marginLeft: 8,
+    },
+    // ── Shared ────────────────────────────────────────────────────────────
     pageNumber: {
       position: "absolute",
       bottom: 10,
@@ -447,7 +509,136 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
   });
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Ad placement helpers ───────────────────────────────────────────────────────
+
+/** Returns true for placements that need their own standalone page */
+function isStandalonePage(placement: string): boolean {
+  return [
+    "FULL_PAGE",
+    "HALF_PAGE_TOP",
+    "HALF_PAGE_BOTTOM",
+  ].includes(placement);
+}
+
+/** Returns true for placements that live inside a section page */
+function isInlinePlacement(placement: string): boolean {
+  return [
+    "SIDEBAR_LEFT",
+    "SIDEBAR_RIGHT",
+    "HEADER_BANNER",
+    "FOOTER_BANNER",
+    "CATEGORY_SPONSOR",
+  ].includes(placement);
+}
+
+// ── Inline ad elements (rendered inside a section page) ───────────────────
+
+function AdBannerElement({
+  ad,
+  styles,
+}: {
+  ad: PdfAdData;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  if (ad.imageUrl) {
+    return React.createElement(Image, { src: ad.imageUrl, style: styles.adBannerImg });
+  }
+  return React.createElement(
+    View,
+    { style: styles.adBannerBlock },
+    React.createElement(Text, { style: styles.adBannerText }, ad.titleAr)
+  );
+}
+
+function AdSidebarElement({
+  ad,
+  styles,
+}: {
+  ad: PdfAdData;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  return React.createElement(
+    View,
+    { style: styles.adSidebarCol },
+    ad.imageUrl
+      ? React.createElement(Image, { src: ad.imageUrl, style: styles.adSidebarImg })
+      : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr),
+    React.createElement(Text, { style: styles.adSidebarText }, ad.advertiserName),
+    ad.phone
+      ? React.createElement(Text, { style: [styles.adSidebarText, { color: styles.adTextPhone.color }] }, ad.phone)
+      : null
+  );
+}
+
+function AdSponsorBadge({
+  ad,
+  styles,
+}: {
+  ad: PdfAdData;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  return React.createElement(
+    View,
+    { style: styles.adSponsorBadge },
+    React.createElement(Text, { style: styles.adSponsorText }, `راعي: ${ad.advertiserName}`)
+  );
+}
+
+// ── Standalone ad page ─────────────────────────────────────────────────────────
+
+function StandaloneAdPage({
+  ad,
+  styles,
+  pageSize,
+}: {
+  ad: PdfAdData;
+  styles: ReturnType<typeof makeStyles>;
+  pageSize: "A4" | "LETTER";
+}) {
+  const placement = ad.effectivePlacement;
+
+  if (placement === "FULL_PAGE") {
+    if (ad.imageUrl) {
+      return React.createElement(
+        Page,
+        { size: pageSize, style: styles.coverPage },
+        React.createElement(Image, { src: ad.imageUrl, style: styles.adFullPage })
+      );
+    }
+    return React.createElement(
+      Page,
+      { size: pageSize, style: styles.coverPage },
+      React.createElement(
+        View,
+        { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
+        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
+        ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+      )
+    );
+  }
+
+  // HALF_PAGE_TOP or HALF_PAGE_BOTTOM
+  const isTop = placement === "HALF_PAGE_TOP";
+  const halfBlock = ad.imageUrl
+    ? React.createElement(Image, { src: ad.imageUrl, style: styles.adHalfBlock })
+    : React.createElement(
+        View,
+        { style: [styles.adTextCard, { height: 200 }] },
+        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
+        ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+      );
+
+  return React.createElement(
+    Page,
+    { size: pageSize, style: styles.page },
+    isTop ? halfBlock : React.createElement(View, { style: { flex: 1 } }),
+    isTop ? React.createElement(View, { style: { flex: 1 } }) : halfBlock
+  );
+}
+
+// ── Business card components ────────────────────────────────────────────────────
 
 function LogoElement({
   business,
@@ -547,9 +738,9 @@ function BusinessCardDense({
     business.addressAr
       ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
       : null,
-    business.phoneNumbers.slice(0, 2).map((p) =>
-      React.createElement(Text, { key: p.number, style: styles.phoneText }, p.number)
-    )
+    business.phoneNumbers
+      .slice(0, 2)
+      .map((p) => React.createElement(Text, { key: p.number, style: styles.phoneText }, p.number))
   );
 }
 
@@ -592,28 +783,22 @@ function DividerPage({
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
 }) {
-  const icon = section.icon ?? getCategoryIcon(section.nameAr);
-  const title = section.sectionTitleAr ?? section.nameAr;
   return React.createElement(
     Page,
     { size: pageSize, style: styles.dividerPage },
-    React.createElement(Text, { style: styles.dividerIcon }, icon),
-    React.createElement(Text, { style: styles.dividerTitle }, title),
+    React.createElement(Text, { style: styles.dividerIcon }, section.icon ?? getCategoryIcon(section.nameAr)),
+    React.createElement(Text, { style: styles.dividerTitle }, section.sectionTitleAr ?? section.nameAr),
     React.createElement(View, { style: styles.dividerAccentBar })
   );
 }
 
-// ── Page-number Index (new) ───────────────────────────────────────────────────
-//
-// Layout: cover=1, intro?=1, then per category: divider + content = 2 pages each.
-// We pre-compute a page map so every category & business knows its page.
-// The index is placed right after the cover (and intro if present).
+// ── Page-number Index ────────────────────────────────────────────────────────────
 
 interface PageMapEntry {
   categoryId: string;
   nameAr: string;
   icon: string;
-  contentPage: number; // the content page (after divider)
+  contentPage: number;
   businesses: { id: string; nameAr: string; page: number }[];
 }
 
@@ -622,10 +807,10 @@ function buildPageMap(
   hasIntro: boolean
 ): PageMapEntry[] {
   // Pages before first category: cover(1) + intro(0|1) + index(1)
-  let pageCounter = 1 + (hasIntro ? 1 : 0) + 1; // index page itself is page 2 or 3
+  let pageCounter = 1 + (hasIntro ? 1 : 0) + 1;
 
   return sections.map((sec) => {
-    const dividerPage = ++pageCounter; // divider page
+    pageCounter++; // divider page
     const contentPage = ++pageCounter; // content page
     return {
       categoryId: sec.categoryId,
@@ -655,76 +840,169 @@ function PageNumberIndexPage({
     { size: pageSize, style: styles.page },
     React.createElement(Text, { style: styles.indexTitle }, "الفهرس"),
     ...pageMap.flatMap((entry) => [
-      // Category header row with page number
+      // Category header: [name ... page#]  — in RTL both flush right
       React.createElement(
         View,
         { key: `idx-cat-${entry.categoryId}`, style: styles.indexCategoryRow },
         React.createElement(
           Text,
+          { style: styles.indexPageNum },
+          `${entry.contentPage}`
+        ),
+        React.createElement(
+          Text,
           { style: styles.indexCategoryName },
           `${entry.icon}  ${entry.nameAr}`
-        ),
-        React.createElement(Text, { style: styles.indexPageNum }, `${entry.contentPage}`)
+        )
       ),
-      // Business rows under this category
+      // Business rows
       ...entry.businesses.map((b) =>
         React.createElement(
           View,
           { key: `idx-biz-${b.id}`, style: styles.indexBusinessRow },
-          React.createElement(Text, { style: styles.indexBusinessName }, b.nameAr),
-          React.createElement(Text, { style: styles.indexPageNum }, `${b.page}`)
+          React.createElement(Text, { style: styles.indexBusinessPageNum }, `${b.page}`),
+          React.createElement(Text, { style: styles.indexBusinessName }, b.nameAr)
         )
       ),
     ])
   );
 }
 
-// ── Ad block ──────────────────────────────────────────────────────────────────
+// ── Category section page (with inline ad support) ─────────────────────────
 
-function AdBlock({
-  ad,
+function CategorySectionPage({
+  section,
+  qrMap,
   styles,
   pageSize,
-  isFullPage,
+  includeQr,
+  includeLogo,
+  layout,
+  isPreview,
+  inlineAd,     // ad to embed inside this page (sidebar/banner/sponsor)
 }: {
-  ad: PdfAdData;
+  section: PdfCategorySection;
+  qrMap: Map<string, string>;
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
-  isFullPage: boolean;
+  includeQr: boolean;
+  includeLogo: boolean;
+  layout: PdfLayoutConfig;
+  isPreview: boolean;
+  inlineAd?: PdfAdData | null;
 }) {
-  if (isFullPage) {
-    if (ad.imageUrl) {
-      return React.createElement(
-        Page,
-        { size: pageSize, style: styles.coverPage },
-        React.createElement(Image, { src: ad.imageUrl, style: styles.adFullPage })
-      );
-    }
-    return React.createElement(
-      Page,
-      { size: pageSize, style: styles.coverPage },
-      React.createElement(
+  const isDense = section.listingTemplate === "DENSE";
+  const placement = inlineAd?.effectivePlacement ?? null;
+
+  // Sponsor badge in header?
+  const sponsorBadge =
+    inlineAd && placement === "CATEGORY_SPONSOR"
+      ? React.createElement(AdSponsorBadge, { ad: inlineAd, styles })
+      : null;
+
+  // Header banner (top)?
+  const headerBanner =
+    inlineAd && placement === "HEADER_BANNER"
+      ? React.createElement(
+          View,
+          { style: styles.adBannerBlock },
+          React.createElement(AdBannerElement, { ad: inlineAd, styles })
+        )
+      : null;
+
+  // Footer banner (bottom, absolute-like via ordering)?
+  const footerBanner =
+    inlineAd && placement === "FOOTER_BANNER"
+      ? React.createElement(
+          View,
+          { style: [styles.adBannerBlock, { marginTop: 8 }] },
+          React.createElement(AdBannerElement, { ad: inlineAd, styles })
+        )
+      : null;
+
+  // Sidebar (left or right)?
+  const hasSidebar =
+    inlineAd &&
+    (placement === "SIDEBAR_LEFT" || placement === "SIDEBAR_RIGHT");
+
+  const businessList = isDense
+    ? React.createElement(
         View,
-        { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
-        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
-        ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+        { style: styles.denseGrid },
+        ...section.businesses.map((b) =>
+          React.createElement(BusinessCardDense, { key: b.id, business: b, styles })
+        )
       )
-    );
-  }
-  if (ad.imageUrl) {
-    return React.createElement(Image, { src: ad.imageUrl, style: styles.adHalfPage });
-  }
+    : React.createElement(
+        View,
+        { style: { flex: 1 } },
+        ...section.businesses.map((b) =>
+          React.createElement(BusinessCardStandard, {
+            key: b.id,
+            business: b,
+            qrDataUrl: qrMap.get(b.id),
+            styles,
+            includeQr,
+            includeLogo,
+          })
+        )
+      );
+
+  // Main content area (with or without sidebar)
+  const contentArea = hasSidebar
+    ? React.createElement(
+        View,
+        {
+          style: {
+            display: "flex",
+            flexDirection: placement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
+            gap: 8,
+            flex: 1,
+          },
+        },
+        businessList,
+        React.createElement(AdSidebarElement, { ad: inlineAd!, styles })
+      )
+    : businessList;
+
   return React.createElement(
-    View,
-    { style: styles.adTextCard },
-    React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-    React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
-    ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+    Page,
+    { size: pageSize, style: styles.page },
+    isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
+    headerBanner,
+    // Section header (with optional sponsor badge)
+    React.createElement(
+      View,
+      {
+        style: [
+          section.colorTheme
+            ? { ...styles.sectionHeader, backgroundColor: section.colorTheme }
+            : styles.sectionHeader,
+          { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+        ] as never,
+      },
+      sponsorBadge,
+      React.createElement(
+        Text,
+        { style: styles.sectionHeaderText },
+        section.sectionTitleAr ?? section.nameAr
+      )
+    ),
+    section.sectionIntroAr
+      ? React.createElement(Text, { style: styles.sectionIntro }, section.sectionIntroAr)
+      : null,
+    contentArea,
+    footerBanner,
+    layout.showPageNumbers
+      ? React.createElement(Text, {
+          style: styles.pageNumber,
+          render: ({ pageNumber }: { pageNumber: number }) => `${pageNumber}`,
+        })
+      : null
   );
 }
 
-// ── Profile blocks ────────────────────────────────────────────────────────────
+// ── Profile pages ──────────────────────────────────────────────────────────────
 
 function WebsiteProfilePage({
   profile,
@@ -805,124 +1083,75 @@ function DeveloperProfilePage({
   );
 }
 
-// ── Category section page ─────────────────────────────────────────────────────
-
-function CategorySectionPage({
-  section,
-  qrMap,
-  styles,
-  pageSize,
-  includeQr,
-  includeLogo,
-  layout,
-  isPreview,
-}: {
-  section: PdfCategorySection;
-  qrMap: Map<string, string>;
-  styles: ReturnType<typeof makeStyles>;
-  pageSize: "A4" | "LETTER";
-  includeQr: boolean;
-  includeLogo: boolean;
-  layout: PdfLayoutConfig;
-  isPreview: boolean;
-}) {
-  const isDense = section.listingTemplate === "DENSE";
-
-  const businessElements = isDense
-    ? React.createElement(
-        View,
-        { style: styles.denseGrid },
-        ...section.businesses.map((b) =>
-          React.createElement(BusinessCardDense, { key: b.id, business: b, styles })
-        )
-      )
-    : React.createElement(
-        View,
-        null,
-        ...section.businesses.map((b) =>
-          React.createElement(BusinessCardStandard, {
-            key: b.id,
-            business: b,
-            qrDataUrl: qrMap.get(b.id),
-            styles,
-            includeQr,
-            includeLogo,
-          })
-        )
-      );
-
-  return React.createElement(
-    Page,
-    { size: pageSize, style: styles.page },
-    isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
-    React.createElement(
-      View,
-      {
-        style: section.colorTheme
-          ? { ...styles.sectionHeader, backgroundColor: section.colorTheme }
-          : styles.sectionHeader,
-      },
-      React.createElement(
-        Text,
-        { style: styles.sectionHeaderText },
-        section.sectionTitleAr ?? section.nameAr
-      )
-    ),
-    section.sectionIntroAr
-      ? React.createElement(Text, { style: styles.sectionIntro }, section.sectionIntroAr)
-      : null,
-    businessElements,
-    layout.showPageNumbers
-      ? React.createElement(Text, {
-          style: styles.pageNumber,
-          render: ({ pageNumber }: { pageNumber: number }) => `${pageNumber}`,
-        })
-      : null
-  );
-}
-
 // ── Main document builder ─────────────────────────────────────────────────────
 
 async function buildDocument(input: PdfDocumentInput) {
   registerFonts();
   const styles = makeStyles(input.theme, input.margins);
 
-  // ── Sort categories alphabetically by Arabic name ──────────────────────────
-  const sortedSections = [...input.categorySections].sort((a, b) =>
-    a.nameAr.localeCompare(b.nameAr, "ar")
-  );
+  // ─ Sort categories + businesses alphabetically (Arabic) ──────────────────
+  const sortedSections = [...input.categorySections]
+    .sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar"))
+    .map((sec) => ({
+      ...sec,
+      businesses: [...sec.businesses].sort((a, b) =>
+        a.nameAr.localeCompare(b.nameAr, "ar")
+      ),
+    }));
 
-  // ── Sort businesses alphabetically within each category ───────────────────
-  for (const sec of sortedSections) {
-    sec.businesses = [...sec.businesses].sort((a, b) =>
-      a.nameAr.localeCompare(b.nameAr, "ar")
-    );
-  }
-
-  // ── Pre-generate QR codes ──────────────────────────────────────────────────
+  // ─ Pre-generate QR codes ─────────────────────────────────────────────────
   const qrMap = new Map<string, string>();
   if (input.includeQrCodes) {
     await Promise.all(
       sortedSections.flatMap((s) =>
         s.businesses.map(async (b) => {
-          const dataUrl = await buildQrDataUrl(b.publicUrl);
-          qrMap.set(b.id, dataUrl);
+          qrMap.set(b.id, await buildQrDataUrl(b.publicUrl));
         })
       )
     );
   }
 
-  // ── Separate ads by placement ──────────────────────────────────────────────
-  const fullPageAds = input.ads
-    .filter((a) => a.effectivePlacement === "FULL_PAGE")
+  // ─ Classify ads by placement type ──────────────────────────────────────
+  //
+  // Task-4: ads with positionAfterCategoryId are pinned to that category.
+  // The rest are distributed round-robin.
+
+  const standaloneAds = input.ads
+    .filter((a) => isStandalonePage(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
 
   const inlineAds = input.ads
-    .filter((a) => a.effectivePlacement !== "FULL_PAGE")
+    .filter((a) => isInlinePlacement(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
 
-  let fullPageAdIdx = 0;
-  let inlineAdIdx = 0;
+  // Pinned ads: keyed by categoryId
+  const pinnedStandalone = new Map<string, PdfAdData[]>();
+  const pinnedInline    = new Map<string, PdfAdData>();
+  const floatingStandalone: PdfAdData[] = [];
+  const floatingInline: PdfAdData[] = [];
+
+  for (const ad of standaloneAds) {
+    const pin = (ad as PdfAdData & { positionAfterCategoryId?: string }).positionAfterCategoryId;
+    if (pin) {
+      const arr = pinnedStandalone.get(pin) ?? [];
+      arr.push(ad);
+      pinnedStandalone.set(pin, arr);
+    } else {
+      floatingStandalone.push(ad);
+    }
+  }
+
+  for (const ad of inlineAds) {
+    const pin = (ad as PdfAdData & { positionAfterCategoryId?: string }).positionAfterCategoryId;
+    if (pin && !pinnedInline.has(pin)) {
+      pinnedInline.set(pin, ad);
+    } else {
+      floatingInline.push(ad);
+    }
+  }
+
+  let floatSIdx = 0; // floating standalone round-robin index
+  let floatIIdx = 0; // floating inline round-robin index
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
@@ -941,7 +1170,7 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
-  // 3. Page-number index (replaces both old TOC and old alphabetical index)
+  // 3. Page-number index
   pages.push(
     React.createElement(PageNumberIndexPage, {
       key: "index",
@@ -964,7 +1193,17 @@ async function buildDocument(input: PdfDocumentInput) {
       })
     );
 
-    // 4b. Content
+    // 4b. Determine inline ad for this section
+    let sectionInlineAd: PdfAdData | null = null;
+    if (pinnedInline.has(section.categoryId)) {
+      sectionInlineAd = pinnedInline.get(section.categoryId)!;
+    } else if (floatingInline.length > 0 && idx % 2 === 0) {
+      // assign floating inline ads every other section
+      sectionInlineAd = floatingInline[floatIIdx % floatingInline.length];
+      floatIIdx++;
+    }
+
+    // 4c. Content page (inline ads are embedded here)
     pages.push(
       React.createElement(CategorySectionPage, {
         key: `section-${section.categoryId}`,
@@ -976,40 +1215,34 @@ async function buildDocument(input: PdfDocumentInput) {
         includeLogo: input.includeBusinessLogos,
         layout: input.layout,
         isPreview: input.isPreview,
+        inlineAd: sectionInlineAd,
       })
     );
 
-    // 4c. Full-page ad every 2nd section
-    if ((idx + 1) % 2 === 0 && fullPageAds.length > 0) {
-      const ad = fullPageAds[fullPageAdIdx % fullPageAds.length];
-      fullPageAdIdx++;
+    // 4d. Standalone ads after this section
+    const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
+    for (const ad of pinnedHere) {
       pages.push(
-        React.createElement(AdBlock, {
-          key: `ad-full-${ad.id}-${idx}`,
+        React.createElement(StandaloneAdPage, {
+          key: `ad-pinned-${ad.id}`,
           ad,
           styles,
           pageSize: input.pageSize,
-          isFullPage: true,
         })
       );
     }
 
-    // 4d. Inline ad on odd sections
-    if (inlineAds.length > 0 && (idx + 1) % 2 !== 0) {
-      const ad = inlineAds[inlineAdIdx % inlineAds.length];
-      inlineAdIdx++;
+    // Floating standalone: every 2nd section
+    if (floatingStandalone.length > 0 && (idx + 1) % 2 === 0 && pinnedHere.length === 0) {
+      const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
+      floatSIdx++;
       pages.push(
-        React.createElement(
-          Page,
-          { key: `ad-inline-${ad.id}-${idx}`, size: input.pageSize, style: styles.page },
-          React.createElement(AdBlock, {
-            key: `ad-inline-block-${ad.id}`,
-            ad,
-            styles,
-            pageSize: input.pageSize,
-            isFullPage: false,
-          })
-        )
+        React.createElement(StandaloneAdPage, {
+          key: `ad-float-${ad.id}-${idx}`,
+          ad,
+          styles,
+          pageSize: input.pageSize,
+        })
       );
     }
   });
@@ -1052,7 +1285,7 @@ async function buildDocument(input: PdfDocumentInput) {
   return React.createElement(Document, { title: input.titleAr }, ...pages);
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
+// ── Public entry point ─────────────────────────────────────────────────────
 
 export async function generatePdf(
   input: PdfDocumentInput
@@ -1065,7 +1298,7 @@ export async function generatePdf(
     const buffer = Buffer.from(arrayBuffer);
     const pagesCount =
       input.categorySections.length * 2 +
-      2 + // cover + index
+      2 +
       (input.introTextAr ? 1 : 0) +
       (input.closingTextAr ? 1 : 0) +
       (input.includeWebsiteProfile && input.websiteProfile ? 1 : 0) +
