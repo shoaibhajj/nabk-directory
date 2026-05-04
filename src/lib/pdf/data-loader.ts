@@ -2,18 +2,14 @@
  * Loads all data needed for PDF generation from the database.
  * Returns a fully-populated PdfDocumentInput ready for generatePdf().
  *
- * Schema alignment:
- * - BusinessProfile has `mediaFiles` (not `mediaAssets`)
- * - MediaFile has `type` (IMAGE|VIDEO) and `status` — no assetType or isPrimary
- * - Logo is first APPROVED IMAGE in mediaFiles, ordered by displayOrder
+ * Multi-city fix:
+ * - PdfEdition.cityIdsJson stores JSON array of all selected city IDs
+ * - Falls back to single cityId for backwards compat
+ * - businesses are loaded with cityId: { in: cityIds }
  */
 
 import { prisma } from "@/lib/prisma";
-import {
-  DEFAULT_THEME,
-  DEFAULT_MARGINS,
-  DEFAULT_LAYOUT,
-} from "./types";
+import { DEFAULT_THEME, DEFAULT_MARGINS, DEFAULT_LAYOUT } from "./types";
 import type {
   PdfDocumentInput,
   PdfCategorySection,
@@ -32,11 +28,36 @@ function resolveAssetUrl(url: string | null | undefined): string | null {
   return `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
+/** Extract plain text from Tiptap JSON (for react-pdf which can't render HTML) */
+export function tiptapToPlainText(json: unknown): string {
+  if (!json || typeof json !== "object") return String(json ?? "");
+  const node = json as { type?: string; text?: string; content?: unknown[] };
+  if (node.type === "text") return node.text ?? "";
+  if (Array.isArray(node.content)) {
+    return node.content
+      .map(tiptapToPlainText)
+      .join(node.type === "paragraph" ? "\n" : "");
+  }
+  return "";
+}
+
+/** Parse a field that may be Tiptap JSON string or plain text */
+function parseRichText(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    const parsed = JSON.parse(value);
+    return tiptapToPlainText(parsed);
+  } catch {
+    // Not JSON — plain text or legacy HTML
+    return value.replace(/<[^>]+>/g, "").trim();
+  }
+}
+
 export async function loadPdfEditionData(
   editionId: string,
   isPreview = false
 ): Promise<PdfDocumentInput> {
-  // ─ 1. Load edition with all relations ──────────────────────────────────────────────
+  // ─ 1. Load edition with all relations
   const edition = await prisma.pdfEdition.findUniqueOrThrow({
     where: { id: editionId },
     include: {
@@ -53,18 +74,28 @@ export async function loadPdfEditionData(
     },
   });
 
-  // ─ 2. Build category list ───────────────────────────────────────────────────
+  // ─ 2. Resolve city IDs (multi-city support)
+  // cityIdsJson stores ["id1", "id2", ...] — falls back to single cityId
+  let cityIds: string[] = [edition.cityId];
+  if (edition.cityIdsJson) {
+    try {
+      const parsed = JSON.parse(edition.cityIdsJson as string);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        cityIds = parsed as string[];
+      }
+    } catch { /* keep fallback */ }
+  }
+
+  // ─ 3. Build category filter
   const targetCategoryIds =
     edition.generationMode === "SELECTED_CATEGORIES"
       ? edition.categories.map((c) => c.categoryId)
       : undefined;
 
-  // ─ 3. Load businesses ─────────────────────────────────────────────────────────
-  // mediaFiles = correct relation name on BusinessProfile
-  // Logo = first APPROVED IMAGE ordered by displayOrder
+  // ─ 4. Load businesses from ALL selected cities
   const businesses = await prisma.businessProfile.findMany({
     where: {
-      cityId: edition.cityId,
+      cityId: cityIds.length === 1 ? cityIds[0] : { in: cityIds },
       status: "ACTIVE",
       deletedAt: null,
       ...(targetCategoryIds ? { categoryId: { in: targetCategoryIds } } : {}),
@@ -73,7 +104,6 @@ export async function loadPdfEditionData(
       phoneNumbers: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       category: true,
-      // First approved image = logo candidate
       mediaFiles: {
         where: { type: "IMAGE", status: "APPROVED" },
         orderBy: { displayOrder: "asc" },
@@ -84,7 +114,7 @@ export async function loadPdfEditionData(
     orderBy: { nameAr: "asc" },
   });
 
-  // ─ 4. Group by category ─────────────────────────────────────────────────────
+  // ─ 5. Group by category
   const businessesByCategory = new Map<string, typeof businesses>();
   for (const biz of businesses) {
     const list = businessesByCategory.get(biz.categoryId) ?? [];
@@ -92,19 +122,15 @@ export async function loadPdfEditionData(
     businessesByCategory.set(biz.categoryId, list);
   }
 
-  // ─ 5. Build category configs ──────────────────────────────────────────────────
+  // ─ 6. Build category configs
   const editionCatMap = new Map(
     edition.categories.map((ec) => [ec.categoryId, ec])
   );
-
   const allCategoryIds = [...businessesByCategory.keys()];
-
   const extraCategoryIds = allCategoryIds.filter((id) => !editionCatMap.has(id));
   const extraCategories =
     extraCategoryIds.length > 0
-      ? await prisma.category.findMany({
-          where: { id: { in: extraCategoryIds } },
-        })
+      ? await prisma.category.findMany({ where: { id: { in: extraCategoryIds } } })
       : [];
 
   const categoryMetaMap = new Map([
@@ -126,7 +152,6 @@ export async function loadPdfEditionData(
         slug: b.slug,
         addressAr: b.addressAr,
         descriptionAr: b.descriptionAr,
-        // Use first approved image as logo candidate
         logoUrl: resolveAssetUrl(b.mediaFiles?.[0]?.url ?? null),
         ratingAverage: b.ratingAverage,
         ratingCount: b.ratingCount,
@@ -154,7 +179,7 @@ export async function loadPdfEditionData(
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 6. Build ads ────────────────────────────────────────────────────────────
+  // ─ 7. Build ads
   const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
     id: ea.ad.id,
     titleAr: ea.ad.titleAr,
@@ -167,42 +192,38 @@ export async function loadPdfEditionData(
     effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
   }));
 
-  // ─ 7. Profile blocks ───────────────────────────────────────────────────────
+  // ─ 8. Profile blocks
   const websiteProfile = edition.includeWebsiteProfile
     ? await prisma.websiteProfileBlock.findFirst({ where: { isActive: true } })
     : null;
-
   const developerProfile = edition.includeDeveloperProfile
     ? await prisma.developerProfileBlock.findFirst({ where: { isVisible: true } })
     : null;
 
-  // ─ 8. Parse JSON config blobs ───────────────────────────────────────────────
+  // ─ 9. Parse JSON config blobs
   const theme: PdfTheme = edition.themeJson
     ? { ...DEFAULT_THEME, ...(edition.themeJson as object) }
     : DEFAULT_THEME;
-
   const margins: PdfMargins = edition.marginsJson
     ? { ...DEFAULT_MARGINS, ...(edition.marginsJson as object) }
     : DEFAULT_MARGINS;
-
   const layout: PdfLayoutConfig = edition.layoutJson
     ? { ...DEFAULT_LAYOUT, ...(edition.layoutJson as object) }
     : DEFAULT_LAYOUT;
 
-  // ─ 9. Assemble final input ────────────────────────────────────────────────────
+  // ─ 10. Assemble — parse rich text fields before returning
   return {
     editionId: edition.id,
     editionSlug: edition.slug,
     titleAr: edition.titleAr,
     coverTitleAr: edition.coverTitleAr,
     coverSubtitleAr: edition.coverSubtitleAr,
-    introTextAr: edition.introTextAr,
-    editorialTextAr: edition.editorialTextAr,
-    closingTextAr: edition.closingTextAr,
+    introTextAr:      parseRichText(edition.introTextAr),
+    editorialTextAr:  parseRichText(edition.editorialTextAr),
+    closingTextAr:    parseRichText(edition.closingTextAr),
     editionNumber: edition.editionNumber,
     cityNameAr: edition.city.nameAr,
-    pageSize: (edition.pageSize as "A4" | "LETTER"),
-
+    pageSize: edition.pageSize as "A4" | "LETTER",
     includeAlphabeticalIndex: edition.includeAlphabeticalIndex,
     includeBusinessLogos: edition.includeBusinessLogos,
     includeQrCodes: edition.includeQrCodes,
@@ -211,12 +232,10 @@ export async function loadPdfEditionData(
     includeDeveloperProfile: edition.includeDeveloperProfile,
     showEditionMetadata: edition.showEditionMetadata,
     isPreview,
-
     categorySections,
     ads,
     websiteProfile,
     developerProfile,
-
     theme,
     margins,
     layout,

@@ -6,24 +6,20 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-guards";
 import { AuditAction, PdfAdPlacementType } from "@prisma/client";
 
-// ── Create Edition ──────────────────────────────────────────────────────────────────
+// ── Create Edition ────────────────────────────────────────────────────────────────────
 
 export async function createPdfEdition(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/editions");
 
-  const titleAr       = formData.get("titleAr") as string;
-  const slug          = formData.get("slug") as string;
-  const pageSize      = (formData.get("pageSize") as string) ?? "A4";
-  const editionNumber = Number(formData.get("editionNumber") ?? 1);
+  const titleAr        = formData.get("titleAr") as string;
+  const slug           = formData.get("slug") as string;
+  const pageSize       = (formData.get("pageSize") as string) ?? "A4";
+  const editionNumber  = Number(formData.get("editionNumber") ?? 1);
   const generationMode = (formData.get("generationMode") as string) ?? "ALL_ACTIVE";
 
-  // Multi-city: accept checkboxes (cityIds[]) or legacy single cityId
-  const rawCityIds = formData.getAll("cityIds") as string[];
-  const legacyCityId = formData.get("cityId") as string | null;
-  const cityIds = rawCityIds.filter(Boolean);
-
-  // cityId = primary city (first selected, or legacy value)
-  const cityId = cityIds[0] ?? legacyCityId ?? "";
+  // Multi-city: collect all checked cityIds
+  const cityIds = (formData.getAll("cityIds") as string[]).filter(Boolean);
+  const cityId  = cityIds[0] ?? ""; // primary city (required by schema)
 
   if (!titleAr?.trim() || !slug?.trim() || !cityId) {
     throw new Error("حقول العنوان والمسار والمدينة مطلوبة");
@@ -31,19 +27,21 @@ export async function createPdfEdition(formData: FormData) {
 
   const edition = await prisma.pdfEdition.create({
     data: {
-      titleAr:          titleAr.trim(),
-      slug:             slug.trim(),
+      titleAr:         titleAr.trim(),
+      slug:            slug.trim(),
       cityId,
+      // Store full city list as JSON for multi-city data-loader
+      cityIdsJson:     JSON.stringify(cityIds),
       pageSize,
       editionNumber,
       generationMode,
-      status:           "DRAFT",
-      coverTitleAr:     (formData.get("coverTitleAr") as string) || null,
-      coverSubtitleAr:  (formData.get("coverSubtitleAr") as string) || null,
-      introTextAr:      (formData.get("introTextAr") as string) || null,
-      editorialTextAr:  (formData.get("editorialTextAr") as string) || null,
-      closingTextAr:    (formData.get("closingTextAr") as string) || null,
-      // feature flags
+      status:          "DRAFT",
+      coverTitleAr:    (formData.get("coverTitleAr") as string) || null,
+      coverSubtitleAr: (formData.get("coverSubtitleAr") as string) || null,
+      // Tiptap JSON strings (or plain text) — stored as-is, parsed at generation time
+      introTextAr:     (formData.get("introTextAr") as string) || null,
+      editorialTextAr: (formData.get("editorialTextAr") as string) || null,
+      closingTextAr:   (formData.get("closingTextAr") as string) || null,
       includeQrCodes:            formData.get("includeQrCodes") === "on",
       includeBusinessLogos:      formData.get("includeBusinessLogos") === "on",
       includeAlphabeticalIndex:  formData.get("includeAlphabeticalIndex") === "on",
@@ -70,21 +68,24 @@ export async function createPdfEdition(formData: FormData) {
   redirect(`/admin/pdf/editions/${edition.id}`);
 }
 
-// ── Update Edition ─────────────────────────────────────────────────────────────────
+// ── Update Edition ──────────────────────────────────────────────────────────────────
 
 export async function updatePdfEdition(editionId: string, formData: FormData) {
   const session = await requireAdmin(`/admin/pdf/editions/${editionId}/edit`);
 
+  const cityIds = (formData.getAll("cityIds") as string[]).filter(Boolean);
+  const cityId  = cityIds[0];
+
   const data: Record<string, unknown> = {
-    titleAr:          formData.get("titleAr"),
-    coverTitleAr:     formData.get("coverTitleAr") || null,
-    coverSubtitleAr:  formData.get("coverSubtitleAr") || null,
-    introTextAr:      formData.get("introTextAr") || null,
-    editorialTextAr:  formData.get("editorialTextAr") || null,
-    closingTextAr:    formData.get("closingTextAr") || null,
-    pageSize:         formData.get("pageSize"),
-    editionNumber:    Number(formData.get("editionNumber")),
-    generationMode:   formData.get("generationMode") ?? "ALL_ACTIVE",
+    titleAr:         formData.get("titleAr"),
+    coverTitleAr:    formData.get("coverTitleAr") || null,
+    coverSubtitleAr: formData.get("coverSubtitleAr") || null,
+    introTextAr:     formData.get("introTextAr") || null,
+    editorialTextAr: formData.get("editorialTextAr") || null,
+    closingTextAr:   formData.get("closingTextAr") || null,
+    pageSize:        formData.get("pageSize"),
+    editionNumber:   Number(formData.get("editionNumber")),
+    generationMode:  formData.get("generationMode") ?? "ALL_ACTIVE",
     includeQrCodes:            formData.get("includeQrCodes") === "on",
     includeBusinessLogos:      formData.get("includeBusinessLogos") === "on",
     includeAlphabeticalIndex:  formData.get("includeAlphabeticalIndex") === "on",
@@ -94,11 +95,9 @@ export async function updatePdfEdition(editionId: string, formData: FormData) {
     showEditionMetadata:       formData.get("showEditionMetadata") === "on",
   };
 
-  // Multi-city update
-  const rawCityIds = formData.getAll("cityIds") as string[];
-  const cityIds = rawCityIds.filter(Boolean);
-  if (cityIds.length > 0) {
-    data.cityId = cityIds[0]; // primary city
+  if (cityId) {
+    data.cityId      = cityId;
+    data.cityIdsJson = JSON.stringify(cityIds);
   }
 
   await prisma.pdfEdition.update({ where: { id: editionId }, data });
@@ -120,7 +119,7 @@ export async function updatePdfEdition(editionId: string, formData: FormData) {
   redirect(`/admin/pdf/editions/${editionId}`);
 }
 
-// ── Set Edition Status ──────────────────────────────────────────────────────────────
+// ── Set Edition Status ─────────────────────────────────────────────────────────────────
 
 const STATUS_AUDIT_MAP: Record<string, AuditAction> = {
   DRAFT:     AuditAction.PDF_EDITION_UPDATED,
@@ -158,7 +157,7 @@ export async function setEditionStatus(
   revalidatePath("/admin/pdf/editions");
 }
 
-// ── Create Ad ────────────────────────────────────────────────────────────────────────
+// ── Create Ad ─────────────────────────────────────────────────────────────────────────
 
 export async function createPdfAd(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -197,7 +196,7 @@ export async function createPdfAd(formData: FormData) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Update Ad ────────────────────────────────────────────────────────────────────────
+// ── Update Ad ─────────────────────────────────────────────────────────────────────────
 
 export async function updatePdfAd(adId: string, formData: FormData) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -262,14 +261,12 @@ export async function togglePdfAdActive(adId: string) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Delete Ad ────────────────────────────────────────────────────────────────────────
+// ── Delete Ad ─────────────────────────────────────────────────────────────────────────
 
 export async function deletePdfAd(adId: string) {
   const session = await requireAdmin("/admin/pdf/ads");
 
   const ad = await prisma.pdfAd.findUniqueOrThrow({ where: { id: adId } });
-
-  // Remove from all editions first (FK constraint)
   await prisma.pdfEditionAd.deleteMany({ where: { adId } });
   await prisma.pdfAd.delete({ where: { id: adId } });
 
@@ -288,14 +285,11 @@ export async function deletePdfAd(adId: string) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Upsert Website Profile ───────────────────────────────────────────────────────────
+// ── Upsert Website Profile ────────────────────────────────────────────────────────────
 
 export async function upsertWebsiteProfile(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/profiles");
-
-  const existing = await prisma.websiteProfileBlock.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
+  const existing = await prisma.websiteProfileBlock.findFirst({ orderBy: { createdAt: "asc" } });
 
   const data = {
     titleAr:      formData.get("titleAr") as string,
@@ -329,14 +323,11 @@ export async function upsertWebsiteProfile(formData: FormData) {
   revalidatePath("/admin/pdf/profiles");
 }
 
-// ── Upsert Developer Profile ───────────────────────────────────────────────────────────
+// ── Upsert Developer Profile ─────────────────────────────────────────────────────────
 
 export async function upsertDeveloperProfile(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/profiles");
-
-  const existing = await prisma.developerProfileBlock.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
+  const existing = await prisma.developerProfileBlock.findFirst({ orderBy: { createdAt: "asc" } });
 
   const data = {
     fullName:     formData.get("fullName") as string,
