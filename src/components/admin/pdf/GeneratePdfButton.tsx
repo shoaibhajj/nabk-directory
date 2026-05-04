@@ -59,7 +59,7 @@ export function GeneratePdfButton({ editionId, isPreview }: Props) {
         {loading ? (
           <>
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            {جاري التوليد…}
+            {"جاري التوليد…"}
           </>
         ) : isPreview ? (
           "👁️ توليد معاينة"
