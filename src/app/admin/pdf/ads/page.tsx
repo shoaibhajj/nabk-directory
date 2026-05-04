@@ -2,10 +2,16 @@ import { requireAdmin } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { createPdfAd } from "@/app/actions/pdf-editions";
 
+/** Must match PdfAdPlacementType enum in schema.prisma exactly */
 const PLACEMENT_LABELS: Record<string, string> = {
-  FULL_PAGE: "صفحة كاملة",
-  HALF_PAGE: "نصف صفحة",
-  SIDEBAR: "شريط جانبي",
+  FULL_PAGE:        "صفحة كاملة",
+  HALF_PAGE_TOP:    "نصف صفحة — أعلى",
+  HALF_PAGE_BOTTOM: "نصف صفحة — أسفل",
+  SIDEBAR_LEFT:     "شريط جانبي — يسار",
+  SIDEBAR_RIGHT:    "شريط جانبي — يمين",
+  HEADER_BANNER:    "بانر رأس الصفحة",
+  FOOTER_BANNER:    "بانر أسفل الصفحة",
+  CATEGORY_SPONSOR: "راعي تصنيف",
 };
 
 export default async function PdfAdsPage() {
@@ -65,6 +71,7 @@ export default async function PdfAdsPage() {
             <select
               id="placementType"
               name="placementType"
+              defaultValue="SIDEBAR_RIGHT"
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             >
               {Object.entries(PLACEMENT_LABELS).map(([v, l]) => (
@@ -81,6 +88,8 @@ export default async function PdfAdsPage() {
               name="priority"
               type="number"
               defaultValue={0}
+              min={0}
+              max={100}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
           </div>
@@ -92,6 +101,7 @@ export default async function PdfAdsPage() {
               id="targetUrl"
               name="targetUrl"
               dir="ltr"
+              placeholder="https://..."
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
           </div>
@@ -103,6 +113,7 @@ export default async function PdfAdsPage() {
               id="phone"
               name="phone"
               dir="ltr"
+              placeholder="+963..."
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
             />
           </div>
@@ -119,7 +130,10 @@ export default async function PdfAdsPage() {
 
       {/* Ads list */}
       {ads.length === 0 ? (
-        <p className="text-muted-foreground">لا توجد إعلانات بعد.</p>
+        <div className="py-12 text-center text-muted-foreground">
+          <p className="text-lg font-semibold">لا توجد إعلانات بعد.</p>
+          <p className="mt-1 text-sm">أضف إعلانك الأول من الفورم أعلاه.</p>
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {ads.map((ad) => (
@@ -135,18 +149,21 @@ export default async function PdfAdsPage() {
               />
               <p className="font-semibold">{ad.titleAr}</p>
               <p className="text-xs text-muted-foreground">{ad.advertiserName}</p>
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
                   {PLACEMENT_LABELS[ad.placementType] ?? ad.placementType}
                 </span>
                 <span
-                  className={`text-xs font-semibold ${
+                  className={`shrink-0 text-xs font-semibold ${
                     ad.isActive ? "text-green-600" : "text-red-500"
                   }`}
                 >
                   {ad.isActive ? "فعال" : "موقوف"}
                 </span>
               </div>
+              {ad.phone && (
+                <p className="mt-1 text-xs text-muted-foreground" dir="ltr">{ad.phone}</p>
+              )}
             </div>
           ))}
         </div>
