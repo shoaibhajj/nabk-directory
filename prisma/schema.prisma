@@ -209,8 +209,6 @@ model User {
   role              Role      @default(BUSINESS_OWNER)
   emailVerified     DateTime?
   image             String?
-  // Bumped whenever the password is reset; the JWT callback compares this
-  // against the token's issued-at to invalidate older sessions.
   passwordChangedAt DateTime?
   deletedAt         DateTime?
   createdAt         DateTime  @default(now())
@@ -384,9 +382,6 @@ model BusinessProfile {
   coverImageId              String?
   logoImageId               String?
   viewCount                 Int            @default(0)
-  // Highest view-count milestone for which the owner has already received an
-  // engagement notification — prevents duplicate "you reached X views"
-  // pings if the page is refreshed after a milestone.
   lastNotifiedViewMilestone Int            @default(0)
   searchableText            String?        @db.Text
   ratingAverage             Float          @default(0)
@@ -548,10 +543,6 @@ model PlatformSetting {
   @@map("platform_settings")
 }
 
-// Public "contact us / help" inbox. Anyone (including unauthenticated
-// guests) can submit a message; admins read and resolve them. We keep
-// hashed IP and a short user-agent string for abuse triage but never
-// expose them publicly.
 model ContactMessage {
   id          String               @id @default(cuid())
   name        String
@@ -579,9 +570,6 @@ model ContactMessage {
 // PDF SYSTEM — NEW MODELS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Admin-managed legacy printed directory.
-/// Only ONE record should be isPublished=true at any time.
-/// The hero "الدليل القديم" button reads this table.
 model PdfLegacyFile {
   id             String               @id @default(cuid())
   titleAr        String
@@ -589,9 +577,7 @@ model PdfLegacyFile {
   descriptionAr  String?              @db.Text
   descriptionEn  String?              @db.Text
   sourceType     PdfLegacySourceType
-  /// Populated when sourceType = FILE (Cloudinary/storage URL)
   fileUrl        String?
-  /// Populated when sourceType = EXTERNAL_URL
   externalUrl    String?
   coverImageUrl  String?
   buttonLabelAr  String               @default("الدليل القديم")
@@ -605,14 +591,14 @@ model PdfLegacyFile {
   @@map("pdf_legacy_files")
 }
 
-/// One versioned edition of the dynamic PDF directory.
-/// Status flow: DRAFT → REVIEW → PUBLISHED (one per city) → ARCHIVED
 model PdfEdition {
   id                        String           @id @default(cuid())
   cityId                    String
+  /// JSON array of all selected city IDs for multi-city editions
+  /// e.g. ["city-id-1", "city-id-2"]. Falls back to [cityId] if null.
+  cityIdsJson               String?          @db.Text
   titleAr                   String
   titleEn                   String?
-  /// URL-safe identifier, e.g. "nabk-2025-v2"
   slug                      String           @unique
   editionNumber             Int              @default(1)
   status                    PdfEditionStatus @default(DRAFT)
@@ -634,17 +620,12 @@ model PdfEdition {
   showEditionMetadata       Boolean          @default(true)
 
   // ── Generation settings ──────────────────────────────────────────────────
-  /// FULL_CITY = all active businesses; SELECTED_CATEGORIES = only those in PdfEditionCategory
   generationMode            String           @default("FULL_CITY")
-  /// A4 | LETTER
   pageSize                  String           @default("A4")
 
-  // ── JSON blobs for flexible config (avoids dozens of nullable columns) ───
-  /// { marginTop, marginBottom, marginLeft, marginRight } in mm
+  // ── JSON blobs for flexible config ───────────────────────────────────────
   marginsJson               Json?
-  /// { primaryColor, accentColor, headingFont, bodyFont, … }
   themeJson                 Json?
-  /// { showPageNumbers, pageNumberStyle, watermarkText, … }
   layoutJson                Json?
 
   // ── Output tracking ──────────────────────────────────────────────────────
@@ -662,17 +643,13 @@ model PdfEdition {
   @@map("pdf_editions")
 }
 
-/// Per-edition configuration for one category section.
-/// Controls visual style, sort order, and layout template for that section.
 model PdfEditionCategory {
   id              String             @id @default(cuid())
   pdfEditionId    String
   categoryId      String
-  /// 1-based display order within this edition
   displayOrder    Int                @default(0)
   startOnNewPage  Boolean            @default(true)
   includeDivider  Boolean            @default(true)
-  /// Hex colour override, e.g. "#1a6b3a" — falls back to edition theme
   colorTheme      String?
   sectionTitleAr  String?
   sectionIntroAr  String?            @db.Text
@@ -689,20 +666,15 @@ model PdfEditionCategory {
   @@map("pdf_edition_categories")
 }
 
-/// A single ad creative managed via the admin CMS.
-/// Can be targeted to a specific category or left global.
 model PdfAd {
   id             String             @id @default(cuid())
   titleAr        String
   advertiserName String
   imageUrl       String
-  /// Optional click-through URL printed as QR or short URL
   targetUrl      String?
   phone          String?
-  /// null = global ad; set = appears only near that category
   categoryId     String?
   placementType  PdfAdPlacementType
-  /// Higher number = placed first when multiple ads compete for the same slot
   priority       Int                @default(0)
   startsAt       DateTime?
   endsAt         DateTime?
@@ -719,14 +691,11 @@ model PdfAd {
   @@map("pdf_ads")
 }
 
-/// Join table linking a PdfAd to a specific PdfEdition.
-/// Allows placement override per edition without mutating the ad record.
 model PdfEditionAd {
   id                String              @id @default(cuid())
   pdfEditionId      String
   pdfAdId           String
   displayOrder      Int                 @default(0)
-  /// Override the ad's default placement for this edition only
   overridePlacement PdfAdPlacementType?
 
   edition PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
@@ -736,17 +705,12 @@ model PdfEditionAd {
   @@map("pdf_edition_ads")
 }
 
-/// Tracks every async PDF generation attempt for an edition.
-/// One edition can have many jobs (re-generates after edits).
-/// The LATEST SUCCEEDED job provides the canonical outputFileUrl.
 model PdfGenerationJob {
   id                   String       @id @default(cuid())
   pdfEditionId         String
   status               PdfJobStatus @default(QUEUED)
   isPreview            Boolean      @default(false)
-  /// Public URL of the final PDF (Cloudinary / R2 / etc.)
   outputFileUrl        String?
-  /// Smaller preview-quality PDF URL with "مسودة" watermark
   previewFileUrl       String?
   outputFileSizeBytes  Int?
   previewFileSizeBytes Int?
@@ -765,8 +729,6 @@ model PdfGenerationJob {
   @@map("pdf_generation_jobs")
 }
 
-/// Dynamic website/platform profile block embedded in every edition.
-/// Editable by ADMIN. Only ONE record should be isActive=true.
 model WebsiteProfileBlock {
   id              String   @id @default(cuid())
   titleAr         String
@@ -776,11 +738,9 @@ model WebsiteProfileBlock {
   bodyTextAr      String?  @db.Text
   bodyTextEn      String?  @db.Text
   websiteUrl      String?
-  /// Pre-generated QR code image URL (can be regenerated on save)
   qrCodeUrl       String?
   supportEmail    String?
   supportPhone    String?
-  /// JSON array: [{ platform, url }]
   socialLinksJson Json?
   logoUrl         String?
   bannerImageUrl  String?
@@ -793,8 +753,6 @@ model WebsiteProfileBlock {
   @@map("website_profile_blocks")
 }
 
-/// Dynamic developer/creator credits block.
-/// Editable by SUPER_ADMIN only. isVisible controls whether it appears in generated PDFs.
 model DeveloperProfileBlock {
   id              String   @id @default(cuid())
   fullName        String
@@ -811,11 +769,9 @@ model DeveloperProfileBlock {
   email           String?
   phone           String?
   whatsapp        String?
-  /// JSON array: [{ platform, url }]
   socialLinksJson Json?
   profileImageUrl String?
   logoUrl         String?
-  /// e.g. "تم التطوير بواسطة" / "Built by"
   ctaTextAr       String?
   ctaTextEn       String?
   isVisible       Boolean  @default(false)
