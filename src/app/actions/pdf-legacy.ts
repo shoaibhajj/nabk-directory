@@ -138,7 +138,6 @@ export async function toggleLegacyPdfPublish(
 
   await prisma.$transaction(async (tx) => {
     if (publish) {
-      // Unpublish all others first
       await tx.pdfLegacyFile.updateMany({
         where: { id: { not: id } },
         data: { isPublished: false, publishedAt: null },
