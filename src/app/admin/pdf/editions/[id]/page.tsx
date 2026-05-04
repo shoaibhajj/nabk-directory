@@ -147,10 +147,10 @@ export default async function EditionDetailPage({
                       <JobStatusBadge status={job.status} />
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {job.pagesCount ?? —}
+                    {job.pagesCount ?? "—"}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {job.businessesCount ?? —}
+                      {job.businessesCount ?? "—"}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {job.isPreview ? "معاينة" : "نهائي"}
