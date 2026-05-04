@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-guards";
-import { AuditAction } from "@prisma/client";
+import { AuditAction, PdfAdPlacementType } from "@prisma/client";
 
-// ── Create Edition ────────────────────────────────────────────────────────────────
+// ── Create Edition ────────────────────────────────────────────────────────────
 
 export async function createPdfEdition(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/editions");
@@ -30,10 +30,10 @@ export async function createPdfEdition(formData: FormData) {
       editionNumber,
       status: "DRAFT",
       generationMode: "ALL_ACTIVE",
-      coverTitleAr: formData.get("coverTitleAr") as string | null,
-      coverSubtitleAr: formData.get("coverSubtitleAr") as string | null,
-      introTextAr: formData.get("introTextAr") as string | null,
-      closingTextAr: formData.get("closingTextAr") as string | null,
+      coverTitleAr: (formData.get("coverTitleAr") as string) || null,
+      coverSubtitleAr: (formData.get("coverSubtitleAr") as string) || null,
+      introTextAr: (formData.get("introTextAr") as string) || null,
+      closingTextAr: (formData.get("closingTextAr") as string) || null,
     },
   });
 
@@ -53,7 +53,7 @@ export async function createPdfEdition(formData: FormData) {
   redirect(`/admin/pdf/editions/${edition.id}`);
 }
 
-// ── Update Edition ────────────────────────────────────────────────────────────────
+// ── Update Edition ────────────────────────────────────────────────────────────
 
 export async function updatePdfEdition(editionId: string, formData: FormData) {
   const session = await requireAdmin(`/admin/pdf/editions/${editionId}/edit`);
@@ -94,7 +94,15 @@ export async function updatePdfEdition(editionId: string, formData: FormData) {
   redirect(`/admin/pdf/editions/${editionId}`);
 }
 
-// ── Publish / Archive ─────────────────────────────────────────────────────────────
+// ── Set Edition Status ────────────────────────────────────────────────────────
+// Maps each target status to the correct AuditAction enum value.
+// (Schema has no generic PDF_EDITION_STATUS_CHANGED action.)
+
+const STATUS_AUDIT_MAP: Record<string, AuditAction> = {
+  DRAFT:     AuditAction.PDF_EDITION_UPDATED,   // revert to draft = update
+  PUBLISHED: AuditAction.PDF_EDITION_PUBLISHED,
+  ARCHIVED:  AuditAction.PDF_EDITION_ARCHIVED,
+};
 
 export async function setEditionStatus(
   editionId: string,
@@ -102,14 +110,20 @@ export async function setEditionStatus(
 ) {
   const session = await requireAdmin("/admin/pdf/editions");
 
-  await prisma.pdfEdition.update({ where: { id: editionId }, data: { status } });
+  await prisma.pdfEdition.update({
+    where: { id: editionId },
+    data: {
+      status,
+      publishedAt: status === "PUBLISHED" ? new Date() : undefined,
+    },
+  });
 
   await prisma.auditLog.create({
     data: {
       actorId: session.user.id,
       actorEmail: session.user.email ?? "",
       actorRole: session.user.role,
-      action: AuditAction.PDF_EDITION_STATUS_CHANGED,
+      action: STATUS_AUDIT_MAP[status] ?? AuditAction.PDF_EDITION_UPDATED,
       entityType: "PdfEdition",
       entityId: editionId,
       newValues: { status },
@@ -120,21 +134,26 @@ export async function setEditionStatus(
   revalidatePath("/admin/pdf/editions");
 }
 
-// ── Create Ad ─────────────────────────────────────────────────────────────────────
+// ── Create Ad ─────────────────────────────────────────────────────────────────
 
 export async function createPdfAd(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/ads");
 
+  // Validate placement against the enum
+  const rawPlacement = formData.get("placementType") as string;
+  const validPlacements = Object.values(PdfAdPlacementType);
+  const placementType = validPlacements.includes(rawPlacement as PdfAdPlacementType)
+    ? (rawPlacement as PdfAdPlacementType)
+    : PdfAdPlacementType.SIDEBAR_RIGHT;
+
   const ad = await prisma.pdfAd.create({
     data: {
-      titleAr: formData.get("titleAr") as string,
+      titleAr:        formData.get("titleAr") as string,
       advertiserName: formData.get("advertiserName") as string,
-      imageUrl: formData.get("imageUrl") as string,
-      targetUrl: (formData.get("targetUrl") as string) || null,
-      phone: (formData.get("phone") as string) || null,
-      placementType:
-        (formData.get("placementType") as "FULL_PAGE" | "HALF_PAGE" | "SIDEBAR") ??
-        "FULL_PAGE",
+      imageUrl:       formData.get("imageUrl") as string,
+      targetUrl:      (formData.get("targetUrl") as string) || null,
+      phone:          (formData.get("phone") as string) || null,
+      placementType,
       priority: Number(formData.get("priority") ?? 0),
       isActive: true,
     },
@@ -142,20 +161,20 @@ export async function createPdfAd(formData: FormData) {
 
   await prisma.auditLog.create({
     data: {
-      actorId: session.user.id,
+      actorId:    session.user.id,
       actorEmail: session.user.email ?? "",
-      actorRole: session.user.role,
-      action: AuditAction.PDF_AD_CREATED,
+      actorRole:  session.user.role,
+      action:     AuditAction.PDF_AD_CREATED,
       entityType: "PdfAd",
-      entityId: ad.id,
-      newValues: { titleAr: ad.titleAr },
+      entityId:   ad.id,
+      newValues:  { titleAr: ad.titleAr, placementType },
     },
   });
 
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Upsert Website Profile ────────────────────────────────────────────────────────
+// ── Upsert Website Profile ────────────────────────────────────────────────────
 
 export async function upsertWebsiteProfile(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/profiles");
@@ -165,13 +184,13 @@ export async function upsertWebsiteProfile(formData: FormData) {
   });
 
   const data = {
-    titleAr: formData.get("titleAr") as string,
-    shortTextAr: (formData.get("shortTextAr") as string) || null,
-    bodyTextAr: (formData.get("bodyTextAr") as string) || null,
-    websiteUrl: (formData.get("websiteUrl") as string) || null,
+    titleAr:      formData.get("titleAr") as string,
+    shortTextAr:  (formData.get("shortTextAr") as string) || null,
+    bodyTextAr:   (formData.get("bodyTextAr") as string) || null,
+    websiteUrl:   (formData.get("websiteUrl") as string) || null,
     supportEmail: (formData.get("supportEmail") as string) || null,
     supportPhone: (formData.get("supportPhone") as string) || null,
-    ctaTextAr: (formData.get("ctaTextAr") as string) || null,
+    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
     isActive: true,
   };
 
@@ -183,20 +202,20 @@ export async function upsertWebsiteProfile(formData: FormData) {
 
   await prisma.auditLog.create({
     data: {
-      actorId: session.user.id,
+      actorId:    session.user.id,
       actorEmail: session.user.email ?? "",
-      actorRole: session.user.role,
-      action: AuditAction.WEBSITE_PROFILE_UPDATED,
+      actorRole:  session.user.role,
+      action:     AuditAction.PDF_WEBSITE_PROFILE_UPDATED,  // ✔ fixed
       entityType: "WebsiteProfileBlock",
-      entityId: existing?.id ?? "new",
-      newValues: data,
+      entityId:   existing?.id ?? "new",
+      newValues:  data,
     },
   });
 
   revalidatePath("/admin/pdf/profiles");
 }
 
-// ── Upsert Developer Profile ────────────────────────────────────────────────────────
+// ── Upsert Developer Profile ──────────────────────────────────────────────────
 
 export async function upsertDeveloperProfile(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/profiles");
@@ -206,13 +225,13 @@ export async function upsertDeveloperProfile(formData: FormData) {
   });
 
   const data = {
-    fullName: formData.get("fullName") as string,
-    roleTitleAr: (formData.get("roleTitleAr") as string) || null,
-    shortBioAr: (formData.get("shortBioAr") as string) || null,
+    fullName:     formData.get("fullName") as string,
+    roleTitleAr:  (formData.get("roleTitleAr") as string) || null,
+    shortBioAr:   (formData.get("shortBioAr") as string) || null,
     portfolioUrl: (formData.get("portfolioUrl") as string) || null,
-    email: (formData.get("email") as string) || null,
-    phone: (formData.get("phone") as string) || null,
-    ctaTextAr: (formData.get("ctaTextAr") as string) || null,
+    email:        (formData.get("email") as string) || null,
+    phone:        (formData.get("phone") as string) || null,
+    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
     isVisible: true,
   };
 
@@ -224,13 +243,13 @@ export async function upsertDeveloperProfile(formData: FormData) {
 
   await prisma.auditLog.create({
     data: {
-      actorId: session.user.id,
+      actorId:    session.user.id,
       actorEmail: session.user.email ?? "",
-      actorRole: session.user.role,
-      action: AuditAction.DEVELOPER_PROFILE_UPDATED,
+      actorRole:  session.user.role,
+      action:     AuditAction.PDF_DEVELOPER_PROFILE_UPDATED,  // ✔ fixed
       entityType: "DeveloperProfileBlock",
-      entityId: existing?.id ?? "new",
-      newValues: data,
+      entityId:   existing?.id ?? "new",
+      newValues:  data,
     },
   });
 
