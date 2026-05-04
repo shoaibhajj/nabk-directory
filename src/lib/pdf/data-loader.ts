@@ -2,9 +2,10 @@
  * Loads all data needed for PDF generation from the database.
  * Returns a fully-populated PdfDocumentInput ready for generatePdf().
  *
- * Round 1 fixes:
- * - Logos: actually load mediaAsset for each business when includeBusinessLogos = true
- * - Multi-city: support cityIds array (falls back to single cityId for backwards compat)
+ * Schema alignment:
+ * - BusinessProfile has `mediaFiles` (not `mediaAssets`)
+ * - MediaFile has `type` (IMAGE|VIDEO) and `status` — no assetType or isPrimary
+ * - Logo is first APPROVED IMAGE in mediaFiles, ordered by displayOrder
  */
 
 import { prisma } from "@/lib/prisma";
@@ -25,10 +26,6 @@ import type {
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nabk-directory.com";
 
-/**
- * Resolves a stored asset URL to an absolute URL suitable for @react-pdf/renderer.
- * Cloudinary URLs are returned as-is. Relative paths get the SITE_URL prefix.
- */
 function resolveAssetUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -39,7 +36,7 @@ export async function loadPdfEditionData(
   editionId: string,
   isPreview = false
 ): Promise<PdfDocumentInput> {
-  // ─ 1. Load edition with all relations ─────────────────────────────────────────
+  // ─ 1. Load edition with all relations ──────────────────────────────────────────────
   const edition = await prisma.pdfEdition.findUniqueOrThrow({
     where: { id: editionId },
     include: {
@@ -56,13 +53,15 @@ export async function loadPdfEditionData(
     },
   });
 
-  // ─ 2. Build category list ─────────────────────────────────────────────────────
+  // ─ 2. Build category list ───────────────────────────────────────────────────
   const targetCategoryIds =
     edition.generationMode === "SELECTED_CATEGORIES"
       ? edition.categories.map((c) => c.categoryId)
       : undefined;
 
-  // ─ 3. Load businesses (with logo media asset) ────────────────────────────────
+  // ─ 3. Load businesses ─────────────────────────────────────────────────────────
+  // mediaFiles = correct relation name on BusinessProfile
+  // Logo = first APPROVED IMAGE ordered by displayOrder
   const businesses = await prisma.businessProfile.findMany({
     where: {
       cityId: edition.cityId,
@@ -74,9 +73,10 @@ export async function loadPdfEditionData(
       phoneNumbers: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       category: true,
-      // Load the primary logo asset
-      mediaAssets: {
-        where: { assetType: "LOGO", isPrimary: true },
+      // First approved image = logo candidate
+      mediaFiles: {
+        where: { type: "IMAGE", status: "APPROVED" },
+        orderBy: { displayOrder: "asc" },
         take: 1,
         select: { url: true },
       },
@@ -84,7 +84,7 @@ export async function loadPdfEditionData(
     orderBy: { nameAr: "asc" },
   });
 
-  // ─ 4. Group by category ──────────────────────────────────────────────────────
+  // ─ 4. Group by category ─────────────────────────────────────────────────────
   const businessesByCategory = new Map<string, typeof businesses>();
   for (const biz of businesses) {
     const list = businessesByCategory.get(biz.categoryId) ?? [];
@@ -126,8 +126,8 @@ export async function loadPdfEditionData(
         slug: b.slug,
         addressAr: b.addressAr,
         descriptionAr: b.descriptionAr,
-        // ✅ Fixed: actually load the logo URL instead of hardcoding null
-        logoUrl: resolveAssetUrl(b.mediaAssets?.[0]?.url ?? null),
+        // Use first approved image as logo candidate
+        logoUrl: resolveAssetUrl(b.mediaFiles?.[0]?.url ?? null),
         ratingAverage: b.ratingAverage,
         ratingCount: b.ratingCount,
         phoneNumbers: b.phoneNumbers,
@@ -154,9 +154,7 @@ export async function loadPdfEditionData(
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 6. Build ads ────────────────────────────────────────────────────────────────
-  // ✅ Fixed: map ALL active ads from editionAds (was already correct in query,
-  // but now we also resolve imageUrl to absolute URL)
+  // ─ 6. Build ads ────────────────────────────────────────────────────────────
   const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
     id: ea.ad.id,
     titleAr: ea.ad.titleAr,
@@ -169,7 +167,7 @@ export async function loadPdfEditionData(
     effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
   }));
 
-  // ─ 7. Profile blocks ──────────────────────────────────────────────────────────
+  // ─ 7. Profile blocks ───────────────────────────────────────────────────────
   const websiteProfile = edition.includeWebsiteProfile
     ? await prisma.websiteProfileBlock.findFirst({ where: { isActive: true } })
     : null;
@@ -178,7 +176,7 @@ export async function loadPdfEditionData(
     ? await prisma.developerProfileBlock.findFirst({ where: { isVisible: true } })
     : null;
 
-  // ─ 8. Parse JSON config blobs ─────────────────────────────────────────────────
+  // ─ 8. Parse JSON config blobs ───────────────────────────────────────────────
   const theme: PdfTheme = edition.themeJson
     ? { ...DEFAULT_THEME, ...(edition.themeJson as object) }
     : DEFAULT_THEME;
@@ -191,7 +189,7 @@ export async function loadPdfEditionData(
     ? { ...DEFAULT_LAYOUT, ...(edition.layoutJson as object) }
     : DEFAULT_LAYOUT;
 
-  // ─ 9. Assemble final input ───────────────────────────────────────────────────────
+  // ─ 9. Assemble final input ────────────────────────────────────────────────────
   return {
     editionId: edition.id,
     editionSlug: edition.slug,
