@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { getCategoryIcon } from "@/components/business/category-icons";
+import { PdfHeroButtons } from "@/components/pdf/PdfHeroButtons";
 
 async function searchAction(formData: FormData) {
   "use server";
@@ -54,6 +55,7 @@ export default async function HomePage() {
             مدينتك، مجمعة في مكان واحد.
           </p>
 
+          {/* Search */}
           <form
             action={searchAction}
             className="mx-auto mt-8 flex max-w-2xl items-center gap-2 rounded-full bg-card p-2 shadow-card"
@@ -69,6 +71,7 @@ export default async function HomePage() {
             </Button>
           </form>
 
+          {/* Popular searches */}
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
             <span className="text-muted-foreground">شائع:</span>
             {popular.map((p) => (
@@ -81,6 +84,9 @@ export default async function HomePage() {
               </Link>
             ))}
           </div>
+
+          {/* PDF Hero Buttons — shows only if legacy or published edition exists */}
+          <PdfHeroButtons />
         </div>
       </section>
 
