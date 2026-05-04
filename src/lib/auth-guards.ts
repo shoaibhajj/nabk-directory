@@ -1,10 +1,14 @@
 /**
  * Auth guard helpers for Server Actions and Route Handlers.
  *
- * Usage:
- *   const session = await requireAdmin();   // throws for GUEST / BUSINESS_OWNER
- *   const session = await requireSuperAdmin(); // throws for anyone below SUPER_ADMIN
- *   const session = await requireAuth();    // throws only if not logged in
+ * Usage (Server Components / Server Actions):
+ *   const session = await requireAdmin();
+ *   const session = await requireAdmin("/admin/pdf/legacy"); // custom callbackUrl
+ *   const session = await requireSuperAdmin();
+ *   const session = await requireAuth();
+ *
+ * The callbackUrl param is optional — defaults to "/admin".
+ * It is appended to /sign-in so NextAuth redirects back after login.
  */
 
 import { auth } from "@/lib/auth";
@@ -13,44 +17,39 @@ import { redirect } from "next/navigation";
 
 const ADMIN_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
 
+/** Redirects to sign-in with callbackUrl. Never returns. */
+function goToSignIn(callbackUrl = "/admin"): never {
+  redirect(`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+}
+
 /**
- * Returns the current session if the user is ADMIN or SUPER_ADMIN.
- * Throws a plain Error (which Next.js Server Actions surface as 500)
- * if the user is not authenticated or not privileged enough.
+ * Requires the user to be ADMIN or SUPER_ADMIN.
+ * Redirects to sign-in if not authenticated or not privileged.
  */
-export async function requireAdmin() {
+export async function requireAdmin(callbackUrl?: string) {
   const session = await auth();
-  if (!session?.user?.id) {
-  redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
-  }
-  if (!ADMIN_ROLES.includes(session.user.role)) {
-      redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
-  }
+  if (!session?.user?.id) goToSignIn(callbackUrl);
+  if (!ADMIN_ROLES.includes(session.user.role)) goToSignIn(callbackUrl);
   return session;
 }
 
 /**
- * Returns the current session if the user is SUPER_ADMIN only.
+ * Requires the user to be SUPER_ADMIN only.
+ * Redirects to sign-in if not authenticated or not SUPER_ADMIN.
  */
-export async function requireSuperAdmin() {
+export async function requireSuperAdmin(callbackUrl?: string) {
   const session = await auth();
-  if (!session?.user?.id) {
-     redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
-  }
-  if (session.user.role !== "SUPER_ADMIN") {
-    throw new Error("هذا الإجراء متاح للمسؤول الأعلى فقط");
-  }
+  if (!session?.user?.id) goToSignIn(callbackUrl);
+  if (session.user.role !== "SUPER_ADMIN") goToSignIn(callbackUrl);
   return session;
 }
 
 /**
- * Returns the current session for any authenticated user.
- * Throws if the user is not logged in.
+ * Requires any authenticated user (any role).
+ * Redirects to sign-in if not logged in.
  */
-export async function requireAuth() {
+export async function requireAuth(callbackUrl?: string) {
   const session = await auth();
-  if (!session?.user?.id) {
-     redirect("/sign-in?callbackUrl=/admin/pdf/legacy");
-  }
+  if (!session?.user?.id) goToSignIn(callbackUrl);
   return session;
 }
