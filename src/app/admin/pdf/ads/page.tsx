@@ -1,7 +1,7 @@
 /**
- * /admin/pdf/ads
- * Round 2: full CRUD — create, edit inline, toggle active, delete.
- * No client JS required — everything is Server Actions.
+ * /admin/pdf/ads — Round 2 CRUD
+ * Pure Server Component — no client handlers anywhere.
+ * Delete confirmation lives in DeleteAdButton (Client Component).
  */
 
 import { requireAdmin } from "@/lib/auth-guards";
@@ -10,8 +10,8 @@ import {
   createPdfAd,
   updatePdfAd,
   togglePdfAdActive,
-  deletePdfAd,
 } from "@/app/actions/pdf-editions";
+import { DeleteAdButton } from "./_components/delete-ad-button";
 
 const PLACEMENT_LABELS: Record<string, string> = {
   FULL_PAGE:        "صفحة كاملة",
@@ -35,7 +35,7 @@ export default async function PdfAdsPage() {
     <main className="container mx-auto px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold">إعلانات PDF</h1>
 
-      {/* ── Create form ──────────────────────────────────────────────────── */}
+      {/* Create form */}
       <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
         <h2 className="mb-4 text-lg font-semibold">إضافة إعلان جديد</h2>
         <form action={createPdfAd} className="grid gap-4 sm:grid-cols-2">
@@ -51,8 +51,7 @@ export default async function PdfAdsPage() {
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold" htmlFor="imageUrl">رابط الصورة *</label>
-            <input id="imageUrl" name="imageUrl" required dir="ltr"
-              placeholder="https://..."
+            <input id="imageUrl" name="imageUrl" required dir="ltr" placeholder="https://..."
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
           </div>
           <div>
@@ -88,7 +87,7 @@ export default async function PdfAdsPage() {
         </form>
       </div>
 
-      {/* ── Ads list ───────────────────────────────────────────────────────── */}
+      {/* Ads list */}
       {ads.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">
           <p className="text-lg font-semibold">لا توجد إعلانات بعد.</p>
@@ -97,10 +96,9 @@ export default async function PdfAdsPage() {
       ) : (
         <div className="space-y-4">
           {ads.map((ad) => (
-            <div key={ad.id}
-              className="rounded-xl border border-border bg-secondary/20">
+            <div key={ad.id} className="rounded-xl border border-border bg-secondary/20">
 
-              {/* ─ Card header: image + status badge + position */}
+              {/* Card header: image + badges */}
               <div className="flex items-start gap-4 p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={ad.imageUrl} alt={ad.titleAr}
@@ -108,12 +106,11 @@ export default async function PdfAdsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold">{ad.titleAr}</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        ad.isActive
-                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                          : "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-                      }`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      ad.isActive
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                    }`}>
                       {ad.isActive ? "✅ فعال" : "⛔ موقوف"}
                     </span>
                     <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
@@ -128,7 +125,7 @@ export default async function PdfAdsPage() {
                 </div>
               </div>
 
-              {/* ─ Edit form (always visible, collapsible via details) */}
+              {/* Edit form (collapsible via <details>) */}
               <details className="group border-t border-border">
                 <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-accent
                   hover:bg-secondary/40 list-none flex items-center gap-2">
@@ -179,7 +176,7 @@ export default async function PdfAdsPage() {
                       placeholder="+963..."
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
                   </div>
-                  <div className="sm:col-span-2 flex gap-3 flex-wrap">
+                  <div className="sm:col-span-2">
                     <button type="submit"
                       className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90">
                       حفظ التعديلات
@@ -188,9 +185,9 @@ export default async function PdfAdsPage() {
                 </form>
               </details>
 
-              {/* ─ Actions row */}
+              {/* Actions row */}
               <div className="flex items-center gap-3 border-t border-border px-4 py-3">
-                {/* Toggle active */}
+                {/* Toggle active — pure Server Action */}
                 <form action={togglePdfAdActive.bind(null, ad.id)}>
                   <button type="submit"
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
@@ -202,18 +199,10 @@ export default async function PdfAdsPage() {
                   </button>
                 </form>
 
-                {/* Delete */}
-                <form
-                  action={deletePdfAd.bind(null, ad.id)}
-                  onSubmit={() => confirm(`حذف الإعلان «${ad.titleAr}»؟`)}
-                  className="mr-auto">
-                  <button type="submit"
-                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold
-                      text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400
-                      dark:hover:bg-red-900/20">
-                    سحب / حذف
-                  </button>
-                </form>
+                {/* Delete — Client Component handles confirm() */}
+                <div className="mr-auto">
+                  <DeleteAdButton adId={ad.id} adTitle={ad.titleAr} />
+                </div>
               </div>
 
             </div>
