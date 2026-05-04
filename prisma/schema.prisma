@@ -9,6 +9,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS — existing
+// ─────────────────────────────────────────────────────────────────────────────
+
 enum Role {
   GUEST
   BUSINESS_OWNER
@@ -111,7 +115,89 @@ enum AuditAction {
   RATING_SUBMITTED
   RATING_REMOVED_BY_USER
   RATING_DELETED
+  // ── PDF system ──
+  PDF_LEGACY_UPDATED
+  PDF_LEGACY_PUBLISHED
+  PDF_LEGACY_UNPUBLISHED
+  PDF_EDITION_CREATED
+  PDF_EDITION_UPDATED
+  PDF_EDITION_PUBLISHED
+  PDF_EDITION_ARCHIVED
+  PDF_EDITION_DUPLICATED
+  PDF_GENERATION_STARTED
+  PDF_GENERATION_SUCCEEDED
+  PDF_GENERATION_FAILED
+  PDF_AD_CREATED
+  PDF_AD_UPDATED
+  PDF_AD_DELETED
+  PDF_WEBSITE_PROFILE_UPDATED
+  PDF_DEVELOPER_PROFILE_UPDATED
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS — PDF system (new)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// How the legacy PDF is served to the public user
+enum PdfLegacyOpenMode {
+  PREVIEW           // open in embedded preview first
+  DIRECT_DOWNLOAD   // trigger browser download immediately
+  OPEN_IN_NEW_TAB   // open URL/file in a new browser tab
+}
+
+/// Where the legacy PDF file comes from
+enum PdfLegacySourceType {
+  FILE          // uploaded to our storage
+  EXTERNAL_URL  // public URL managed externally
+}
+
+/// Lifecycle states of a PDF edition
+enum PdfEditionStatus {
+  DRAFT      // being edited, not visible to anyone outside admin
+  REVIEW     // submitted for final review before publish
+  PUBLISHED  // live — only one edition can be PUBLISHED at a time per city
+  ARCHIVED   // replaced by a newer edition; kept for history
+}
+
+/// Supported ad placement slots inside the PDF
+enum PdfAdPlacementType {
+  FULL_PAGE
+  HALF_PAGE_TOP
+  HALF_PAGE_BOTTOM
+  SIDEBAR_LEFT
+  SIDEBAR_RIGHT
+  HEADER_BANNER
+  FOOTER_BANNER
+  CATEGORY_SPONSOR
+}
+
+/// Which listing page template to use for a given category section
+enum PdfListingTemplate {
+  STANDARD         // single-column, generous spacing
+  DENSE            // two-column, compact
+  AD_HEAVY         // single-column with side-margin ad slot
+  MIXED            // alternating blocks (featured + standard rows)
+}
+
+/// How businesses are ordered within a category section
+enum PdfSortMode {
+  ALPHABETICAL       // nameAr A → Z
+  FEATURED_FIRST     // featured flag first, then alphabetical
+  NEWEST_FIRST       // publishedAt desc
+  CUSTOM             // admin-defined displayOrder on each listing (future)
+}
+
+/// Async generation job status
+enum PdfJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXISTING MODELS (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
 
 model User {
   id                String    @id @default(cuid())
@@ -234,6 +320,7 @@ model City {
   updatedAt DateTime          @default(now()) @updatedAt
   country   Country?          @relation(fields: [countryId], references: [id])
   listings  BusinessProfile[]
+  pdfEditions PdfEdition[]
 
   @@index([countryId])
   @@map("cities")
@@ -255,6 +342,8 @@ model Category {
   updatedAt    DateTime          @updatedAt
   listings     BusinessProfile[]
   subListings  BusinessProfile[] @relation("Subcategory")
+  pdfEditionCategories PdfEditionCategory[]
+  pdfAds       PdfAd[]
 
   @@map("categories")
 }
@@ -482,4 +571,254 @@ model ContactMessage {
   @@index([status, createdAt])
   @@index([userId])
   @@map("contact_messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF SYSTEM — NEW MODELS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Admin-managed legacy printed directory.
+/// Only ONE record should be isPublished=true at any time.
+/// The hero "الدليل القديم" button reads this table.
+model PdfLegacyFile {
+  id             String               @id @default(cuid())
+  titleAr        String
+  titleEn        String?
+  descriptionAr  String?              @db.Text
+  descriptionEn  String?              @db.Text
+  sourceType     PdfLegacySourceType
+  /// Populated when sourceType = FILE (Cloudinary/storage URL)
+  fileUrl        String?
+  /// Populated when sourceType = EXTERNAL_URL
+  externalUrl    String?
+  coverImageUrl  String?
+  buttonLabelAr  String               @default("الدليل القديم")
+  buttonLabelEn  String?              @default("Old Directory")
+  openMode       PdfLegacyOpenMode    @default(OPEN_IN_NEW_TAB)
+  isPublished    Boolean              @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@map("pdf_legacy_files")
+}
+
+/// One versioned edition of the dynamic PDF directory.
+/// Status flow: DRAFT → REVIEW → PUBLISHED (one per city) → ARCHIVED
+model PdfEdition {
+  id                        String           @id @default(cuid())
+  cityId                    String
+  titleAr                   String
+  titleEn                   String?
+  /// URL-safe identifier, e.g. "nabk-2025-v2"
+  slug                      String           @unique
+  editionNumber             Int              @default(1)
+  status                    PdfEditionStatus @default(DRAFT)
+
+  // ── Cover & intro copy ──────────────────────────────────────────────────
+  coverTitleAr              String?
+  coverSubtitleAr           String?
+  introTextAr               String?          @db.Text
+  editorialTextAr           String?          @db.Text
+  closingTextAr             String?          @db.Text
+
+  // ── Feature toggles ──────────────────────────────────────────────────────
+  includeAlphabeticalIndex  Boolean          @default(true)
+  includeBusinessLogos      Boolean          @default(false)
+  includeQrCodes            Boolean          @default(true)
+  includeFeaturedBusinesses Boolean          @default(true)
+  includeWebsiteProfile     Boolean          @default(true)
+  includeDeveloperProfile   Boolean          @default(false)
+  showEditionMetadata       Boolean          @default(true)
+
+  // ── Generation settings ──────────────────────────────────────────────────
+  /// FULL_CITY = all active businesses; SELECTED_CATEGORIES = only those in PdfEditionCategory
+  generationMode            String           @default("FULL_CITY")
+  /// A4 | LETTER
+  pageSize                  String           @default("A4")
+
+  // ── JSON blobs for flexible config (avoids dozens of nullable columns) ───
+  /// { marginTop, marginBottom, marginLeft, marginRight } in mm
+  marginsJson               Json?
+  /// { primaryColor, accentColor, headingFont, bodyFont, … }
+  themeJson                 Json?
+  /// { showPageNumbers, pageNumberStyle, watermarkText, … }
+  layoutJson                Json?
+
+  // ── Output tracking ──────────────────────────────────────────────────────
+  publishedAt               DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  city            City                 @relation(fields: [cityId], references: [id])
+  categories      PdfEditionCategory[]
+  editionAds      PdfEditionAd[]
+  generationJobs  PdfGenerationJob[]
+
+  @@index([cityId, status])
+  @@index([status, publishedAt])
+  @@map("pdf_editions")
+}
+
+/// Per-edition configuration for one category section.
+/// Controls visual style, sort order, and layout template for that section.
+model PdfEditionCategory {
+  id              String             @id @default(cuid())
+  pdfEditionId    String
+  categoryId      String
+  /// 1-based display order within this edition
+  displayOrder    Int                @default(0)
+  startOnNewPage  Boolean            @default(true)
+  includeDivider  Boolean            @default(true)
+  /// Hex colour override, e.g. "#1a6b3a" — falls back to edition theme
+  colorTheme      String?
+  sectionTitleAr  String?
+  sectionIntroAr  String?            @db.Text
+  listingTemplate PdfListingTemplate @default(STANDARD)
+  sortMode        PdfSortMode        @default(ALPHABETICAL)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  edition  PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
+  category Category   @relation(fields: [categoryId], references: [id])
+
+  @@unique([pdfEditionId, categoryId])
+  @@index([pdfEditionId, displayOrder])
+  @@map("pdf_edition_categories")
+}
+
+/// A single ad creative managed via the admin CMS.
+/// Can be targeted to a specific category or left global.
+model PdfAd {
+  id             String             @id @default(cuid())
+  titleAr        String
+  advertiserName String
+  imageUrl       String
+  /// Optional click-through URL printed as QR or short URL
+  targetUrl      String?
+  phone          String?
+  /// null = global ad; set = appears only near that category
+  categoryId     String?
+  placementType  PdfAdPlacementType
+  /// Higher number = placed first when multiple ads compete for the same slot
+  priority       Int                @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean            @default(true)
+  notes          String?            @db.Text
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  category    Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  editionAds  PdfEditionAd[]
+
+  @@index([isActive, placementType])
+  @@index([categoryId, isActive])
+  @@map("pdf_ads")
+}
+
+/// Join table linking a PdfAd to a specific PdfEdition.
+/// Allows placement override per edition without mutating the ad record.
+model PdfEditionAd {
+  id                String              @id @default(cuid())
+  pdfEditionId      String
+  pdfAdId           String
+  displayOrder      Int                 @default(0)
+  /// Override the ad's default placement for this edition only
+  overridePlacement PdfAdPlacementType?
+
+  edition PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
+  ad      PdfAd      @relation(fields: [pdfAdId], references: [id], onDelete: Cascade)
+
+  @@unique([pdfEditionId, pdfAdId])
+  @@map("pdf_edition_ads")
+}
+
+/// Tracks every async PDF generation attempt for an edition.
+/// One edition can have many jobs (re-generates after edits).
+/// The LATEST SUCCEEDED job provides the canonical outputFileUrl.
+model PdfGenerationJob {
+  id                   String       @id @default(cuid())
+  pdfEditionId         String
+  status               PdfJobStatus @default(QUEUED)
+  isPreview            Boolean      @default(false)
+  /// Public URL of the final PDF (Cloudinary / R2 / etc.)
+  outputFileUrl        String?
+  /// Smaller preview-quality PDF URL with "مسودة" watermark
+  previewFileUrl       String?
+  outputFileSizeBytes  Int?
+  previewFileSizeBytes Int?
+  pagesCount           Int?
+  businessesCount      Int?
+  categoriesCount      Int?
+  adsCount             Int?
+  errorMessage         String?      @db.Text
+  generatedAt          DateTime?
+  createdAt            DateTime     @default(now())
+
+  edition PdfEdition @relation(fields: [pdfEditionId], references: [id], onDelete: Cascade)
+
+  @@index([pdfEditionId, status])
+  @@index([pdfEditionId, createdAt(sort: Desc)])
+  @@map("pdf_generation_jobs")
+}
+
+/// Dynamic website/platform profile block embedded in every edition.
+/// Editable by ADMIN. Only ONE record should be isActive=true.
+model WebsiteProfileBlock {
+  id              String   @id @default(cuid())
+  titleAr         String
+  titleEn         String?
+  shortTextAr     String?
+  shortTextEn     String?
+  bodyTextAr      String?  @db.Text
+  bodyTextEn      String?  @db.Text
+  websiteUrl      String?
+  /// Pre-generated QR code image URL (can be regenerated on save)
+  qrCodeUrl       String?
+  supportEmail    String?
+  supportPhone    String?
+  /// JSON array: [{ platform, url }]
+  socialLinksJson Json?
+  logoUrl         String?
+  bannerImageUrl  String?
+  ctaTextAr       String?
+  ctaTextEn       String?
+  isActive        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("website_profile_blocks")
+}
+
+/// Dynamic developer/creator credits block.
+/// Editable by SUPER_ADMIN only. isVisible controls whether it appears in generated PDFs.
+model DeveloperProfileBlock {
+  id              String   @id @default(cuid())
+  fullName        String
+  roleTitleAr     String?
+  roleTitleEn     String?
+  shortBioAr      String?
+  shortBioEn      String?
+  longBioAr       String?  @db.Text
+  longBioEn       String?  @db.Text
+  brandName       String?
+  portfolioUrl    String?
+  githubUrl       String?
+  linkedinUrl     String?
+  email           String?
+  phone           String?
+  whatsapp        String?
+  /// JSON array: [{ platform, url }]
+  socialLinksJson Json?
+  profileImageUrl String?
+  logoUrl         String?
+  /// e.g. "تم التطوير بواسطة" / "Built by"
+  ctaTextAr       String?
+  ctaTextEn       String?
+  isVisible       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("developer_profile_blocks")
 }
