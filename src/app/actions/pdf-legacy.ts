@@ -44,7 +44,7 @@ export type UpsertLegacyPdfInput = z.infer<typeof upsertSchema>;
  * Called by the public hero section — no auth required.
  */
 export async function getPublishedLegacyPdf() {
-  return prisma.pdfLegacyFile.findFirst({
+  return prisma.legacyPdfConfig.findFirst({
     where: { isPublished: true },
     select: {
       id: true,
@@ -67,7 +67,7 @@ export async function getPublishedLegacyPdf() {
 /** Returns ALL legacy PDF records ordered newest first (admin only). */
 export async function getLegacyPdfList() {
   await requireAdmin();
-  return prisma.pdfLegacyFile.findMany({
+  return prisma.legacyPdfConfig.findMany({
     orderBy: { createdAt: "desc" },
   });
 }
@@ -75,7 +75,7 @@ export async function getLegacyPdfList() {
 /** Returns a single record by id (admin only). */
 export async function getLegacyPdfById(id: string) {
   await requireAdmin();
-  return prisma.pdfLegacyFile.findUnique({ where: { id } });
+  return prisma.legacyPdfConfig.findUnique({ where: { id } });
 }
 
 // ─── Upsert ──────────────────────────────────────────────────────────────────
@@ -104,8 +104,11 @@ export async function upsertLegacyPdf(raw: UpsertLegacyPdfInput) {
   };
 
   const record = data.id
-    ? await prisma.pdfLegacyFile.update({ where: { id: data.id }, data: payload })
-    : await prisma.pdfLegacyFile.create({ data: payload });
+    ? await prisma.legacyPdfConfig.update({
+        where: { id: data.id },
+        data: payload,
+      })
+    : await prisma.legacyPdfConfig.create({ data: payload });
 
   await prisma.auditLog.create({
     data: {
@@ -113,7 +116,7 @@ export async function upsertLegacyPdf(raw: UpsertLegacyPdfInput) {
       actorEmail: session.user.email ?? "",
       actorRole: session.user.role,
       action: AuditAction.PDF_LEGACY_UPDATED,
-      entityType: "PdfLegacyFile",
+      entityType: "LegacyPdfConfig",
       entityId: record.id,
     },
   });
@@ -138,12 +141,12 @@ export async function toggleLegacyPdfPublish(
 
   await prisma.$transaction(async (tx) => {
     if (publish) {
-      await tx.pdfLegacyFile.updateMany({
+      await tx.legacyPdfConfig.updateMany({
         where: { id: { not: id } },
         data: { isPublished: false, publishedAt: null },
       });
     }
-    await tx.pdfLegacyFile.update({
+    await tx.legacyPdfConfig.update({
       where: { id },
       data: {
         isPublished: publish,
@@ -160,7 +163,7 @@ export async function toggleLegacyPdfPublish(
       action: publish
         ? AuditAction.PDF_LEGACY_PUBLISHED
         : AuditAction.PDF_LEGACY_UNPUBLISHED,
-      entityType: "PdfLegacyFile",
+      entityType: "LegacyPdfConfig",
       entityId: id,
     },
   });
@@ -176,12 +179,12 @@ export async function toggleLegacyPdfPublish(
 export async function deleteLegacyPdf(id: string) {
   const session = await requireAdmin();
 
-  const record = await prisma.pdfLegacyFile.findUnique({ where: { id } });
+  const record = await prisma.legacyPdfConfig.findUnique({ where: { id } });
   if (!record) throw new Error("السجل غير موجود");
   if (record.isPublished)
     throw new Error("لا يمكن حذف سجل منشور — أوقف نشره أولاً");
 
-  await prisma.pdfLegacyFile.delete({ where: { id } });
+  await prisma.legacyPdfConfig.delete({ where: { id } });
 
   await prisma.auditLog.create({
     data: {
@@ -189,7 +192,7 @@ export async function deleteLegacyPdf(id: string) {
       actorEmail: session.user.email ?? "",
       actorRole: session.user.role,
       action: AuditAction.PDF_LEGACY_UPDATED,
-      entityType: "PdfLegacyFile",
+      entityType: "LegacyPdfConfig",
       entityId: id,
       newValues: { deleted: true },
     },

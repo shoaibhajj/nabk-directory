@@ -95,8 +95,7 @@ export default async function EditionDetailPage({
       <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
         <h2 className="mb-4 text-lg font-semibold">توليد PDF</h2>
         <div className="flex flex-wrap gap-3">
-          <GeneratePdfButton editionId={id} isPreview={false} />
-          <GeneratePdfButton editionId={id} isPreview={true} />
+          <GeneratePdfButton editionId={id} />
         </div>
       </div>
 
@@ -133,8 +132,8 @@ export default async function EditionDetailPage({
                   <th className="px-4 py-2 font-semibold">التاريخ</th>
                   <th className="px-4 py-2 font-semibold">الحالة</th>
                   <th className="px-4 py-2 font-semibold">الصفحات</th>
-                  <th className="px-4 py-2 font-semibold">المنشآت</th>
-                  <th className="px-4 py-2 font-semibold">معاينة</th>
+                  <th className="px-4 py-2 font-semibold">حجم الملف</th>
+                  <th className="px-4 py-2 font-semibold">رابط</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -147,13 +146,26 @@ export default async function EditionDetailPage({
                       <JobStatusBadge status={job.status} />
                     </td>
                     <td className="px-4 py-2 text-center">
-                    {job.pagesCount ?? "—"}
+                      {job.pagesCount ?? "—"}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {job.businessesCount ?? "—"}
+                      {job.fileSizeBytes
+                        ? `${(job.fileSizeBytes / 1024).toFixed(0)} KB`
+                        : "—"}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {job.isPreview ? "معاينة" : "نهائي"}
+                      {job.outputFileUrl ? (
+                        <a
+                          href={job.outputFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          تحميل
+                        </a>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -187,11 +199,13 @@ function DetailRow({
 
 function JobStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
+    QUEUED: "bg-gray-100 text-gray-600",
     PROCESSING: "bg-blue-100 text-blue-700",
     SUCCEEDED: "bg-green-100 text-green-700",
     FAILED: "bg-red-100 text-red-700",
   };
   const labels: Record<string, string> = {
+    QUEUED: "في الانتظار",
     PROCESSING: "جاري",
     SUCCEEDED: "نجح",
     FAILED: "فشل",
