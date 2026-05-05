@@ -375,7 +375,7 @@ model PdfEdition {
   titleAr                   String
   slug                      String               @unique
   cityId                    String
-  cityIdsJson               String               @default("[]")
+  cityIdsJson               String?              @default("[]")
   pageSize                  String               @default("A4")
   editionNumber             Int                  @default(1)
   generationMode            String               @default("ALL_ACTIVE")
@@ -412,7 +412,7 @@ model PdfGenerationJob {
   fileUrl    String?
   errorMsg   String?
   createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  updatedAt  DateTime?    @updatedAt
   edition    PdfEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@map("pdf_generation_jobs")
