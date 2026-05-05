@@ -405,59 +405,59 @@ model PdfEdition {
 }
 
 model PdfGenerationJob {
-  id          String        @id @default(cuid())
+  id          String       @id @default(cuid())
   editionId   String
-  status      PdfJobStatus  @default(QUEUED)
+  status      PdfJobStatus @default(QUEUED)
   startedAt   DateTime?
   finishedAt  DateTime?
   fileUrl     String?
   errorMsg    String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  edition     PdfEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  edition     PdfEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@map("pdf_generation_jobs")
 }
 
 model PdfAd {
-  id                      String              @id @default(cuid())
+  id                      String             @id @default(cuid())
   titleAr                 String
   imageUrl                String
   linkUrl                 String?
-  placementType           PdfAdPlacementType  @default(FULL_PAGE)
-  priority                Int                 @default(0)
-  isActive                Boolean             @default(true)
+  placementType           PdfAdPlacementType @default(FULL_PAGE)
+  priority                Int                @default(0)
+  isActive                Boolean            @default(true)
   positionAfterCategoryId String?
-  createdAt               DateTime            @default(now())
-  updatedAt               DateTime            @updatedAt
-  category                Category?           @relation(fields: [positionAfterCategoryId], references: [id])
-  position_after_category Category?           @relation("pdf_ads_position_after_category_idTocategories", fields: [positionAfterCategoryId], references: [id])
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  category                Category?          @relation(fields: [positionAfterCategoryId], references: [id])
+  position_after_category Category?          @relation("pdf_ads_position_after_category_idTocategories", fields: [positionAfterCategoryId], references: [id])
   editionAds              PdfEditionAd[]
 
   @@map("pdf_ads")
 }
 
 model PdfEditionAd {
-  id          String     @id @default(cuid())
-  editionId   String
-  adId        String
-  displayOrder Int       @default(0)
-  edition     PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
-  ad          PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  editionId    String
+  adId         String
+  displayOrder Int        @default(0)
+  edition      PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  ad           PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade)
 
   @@unique([editionId, adId])
   @@map("pdf_edition_ads")
 }
 
 model PdfEditionCategory {
-  id           String          @id @default(cuid())
+  id           String             @id @default(cuid())
   editionId    String
   categoryId   String
-  displayOrder Int             @default(0)
+  displayOrder Int                @default(0)
   template     PdfListingTemplate @default(STANDARD)
-  sortMode     PdfSortMode     @default(ALPHABETICAL)
-  edition      PdfEdition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
-  category     Category        @relation(fields: [categoryId], references: [id])
+  sortMode     PdfSortMode        @default(ALPHABETICAL)
+  edition      PdfEdition         @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  category     Category           @relation(fields: [categoryId], references: [id])
 
   @@unique([editionId, categoryId])
   @@map("pdf_edition_categories")
@@ -588,8 +588,6 @@ enum AuditAction {
   COMMENT_REMOVED_BY_USER
   RATING_SUBMITTED
   RATING_REMOVED_BY_USER
-  LISTING_APPROVED
-  LISTING_REJECTED
   USER_EMAIL_VERIFIED_BY_ADMIN
   USER_VERIFICATION_RESENT
   CONTACT_MESSAGE_RECEIVED
