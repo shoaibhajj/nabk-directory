@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 const businessCardInclude = {
   category: true,
   subcategory: true,
-  phoneNumbers: { orderBy: { displayOrder: "asc" } },
+  phones: { orderBy: { createdAt: "asc" } },
   workingHours: true,
 } satisfies Prisma.BusinessProfileInclude;
 
@@ -21,7 +21,6 @@ export async function getActiveBusinesses(opts?: {
   return prisma.businessProfile.findMany({
     where: {
       status: "ACTIVE",
-      deletedAt: null,
       ...(opts?.categorySlug
         ? { category: { slug: opts.categorySlug } }
         : {}),
@@ -49,10 +48,10 @@ const businessDetailInclude = {
   subcategory: true,
   city: true,
   owner: { select: { id: true, name: true } },
-  phoneNumbers: { orderBy: { displayOrder: "asc" } },
+  phones: { orderBy: { createdAt: "asc" } },
   workingHours: { orderBy: { dayOfWeek: "asc" } },
   socialLinks: true,
-  mediaFiles: {
+  media: {
     where: { status: "APPROVED" },
     orderBy: { displayOrder: "asc" },
   },
@@ -64,7 +63,7 @@ export type BusinessDetail = Prisma.BusinessProfileGetPayload<{
 
 export async function getBusinessById(id: string): Promise<BusinessDetail | null> {
   return prisma.businessProfile.findFirst({
-    where: { id, status: "ACTIVE", deletedAt: null },
+    where: { id, status: "ACTIVE" },
     include: businessDetailInclude,
   });
 }
@@ -78,13 +77,13 @@ export async function getBusinessBySlugOrId(
   slugOrId: string,
 ): Promise<{ business: BusinessDetail; matchedBy: "slug" | "id" } | null> {
   const bySlug = await prisma.businessProfile.findFirst({
-    where: { slug: slugOrId, status: "ACTIVE", deletedAt: null },
+    where: { slug: slugOrId, status: "ACTIVE" },
     include: businessDetailInclude,
   });
   if (bySlug) return { business: bySlug, matchedBy: "slug" };
 
   const byId = await prisma.businessProfile.findFirst({
-    where: { id: slugOrId, status: "ACTIVE", deletedAt: null },
+    where: { id: slugOrId, status: "ACTIVE" },
     include: businessDetailInclude,
   });
   if (byId) return { business: byId, matchedBy: "id" };
@@ -94,7 +93,7 @@ export async function getBusinessBySlugOrId(
 
 export async function getStats() {
   const [businessCount, categoryCount, cityCount] = await Promise.all([
-    prisma.businessProfile.count({ where: { status: "ACTIVE", deletedAt: null } }),
+    prisma.businessProfile.count({ where: { status: "ACTIVE" } }),
     prisma.category.count({ where: { isActive: true } }),
     prisma.city.count({ where: { isActive: true } }),
   ]);
@@ -108,7 +107,7 @@ export async function getCategoriesWithCounts() {
     include: {
       _count: {
         select: {
-          listings: { where: { status: "ACTIVE", deletedAt: null } },
+          listings: { where: { status: "ACTIVE" } },
         },
       },
     },
