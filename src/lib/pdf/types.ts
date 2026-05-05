@@ -116,18 +116,19 @@ export interface PdfCategorySection {
 export interface PdfAdData {
   id: string;
   titleAr: string;
-  advertiserName: string;
+  /** Optional English title — maps to PdfAd.titleEn */
+  titleEn?: string | null;
   imageUrl: string;
-  targetUrl?: string | null;
-  phone?: string | null;
+  /** Maps to PdfAd.linkUrl */
+  linkUrl?: string | null;
   placementType: PdfAdPlacementType;
   priority: number;
   /** Set when overridePlacement is used in PdfEditionAd */
   effectivePlacement: PdfAdPlacementType;
   /**
-   * Task-4: optional category ID.
-   * When provided, the generator pins this ad immediately after that
-   * category's section pages instead of distributing it round-robin.
+   * Optional category ID — when provided, the generator pins this ad
+   * immediately after that category's section pages instead of
+   * distributing it round-robin. Maps to PdfAd.position_after_category_id.
    */
   positionAfterCategoryId?: string | null;
 }

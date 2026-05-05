@@ -120,7 +120,7 @@ export async function getAdminComments(
       where,
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
-        business: { select: { id: true, nameAr: true, slug: true } },
+        business_profiles: { select: { id: true, nameAr: true, slug: true } },
       },
       orderBy: { createdAt: "desc" },
       take: ADMIN_PAGE_SIZE,

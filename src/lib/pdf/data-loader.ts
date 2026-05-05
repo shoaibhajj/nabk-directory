@@ -1,9 +1,5 @@
 /**
  * Loads all data needed for PDF generation from the database.
- *
- * Ads fix: we load ALL active PdfAd records (not just edition-linked ones).
- * Edition-linked ads (editionAds) take priority and can override placement.
- * Standalone active ads are appended if not already included.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -53,18 +49,17 @@ export async function loadPdfEditionData(
   editionId: string,
   isPreview = false
 ): Promise<PdfDocumentInput> {
-  // ─ 1. Load edition
+  // ─ 1. Load edition — use relation names from actual schema
   const edition = await prisma.pdfEdition.findUniqueOrThrow({
     where: { id: editionId },
     include: {
       city: true,
-      categories: {
+      editionCategories: {
         orderBy: { displayOrder: "asc" },
         include: { category: true },
       },
       editionAds: {
         where: { ad: { isActive: true } },
-        orderBy: { displayOrder: "asc" },
         include: { ad: true },
       },
     },
@@ -82,7 +77,7 @@ export async function loadPdfEditionData(
   // ─ 3. Category filter
   const targetCategoryIds =
     edition.generationMode === "SELECTED_CATEGORIES"
-      ? edition.categories.map((c) => c.categoryId)
+      ? edition.editionCategories.map((c) => c.categoryId)
       : undefined;
 
   // ─ 4. Businesses
@@ -97,7 +92,7 @@ export async function loadPdfEditionData(
       phones: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       category: true,
-      media: {
+      media_files: {
         where: { type: "IMAGE", status: "APPROVED" },
         orderBy: { displayOrder: "asc" },
         take: 1,
@@ -116,7 +111,7 @@ export async function loadPdfEditionData(
   }
 
   // ─ 6. Category configs
-  const editionCatMap = new Map(edition.categories.map((ec) => [ec.categoryId, ec]));
+  const editionCatMap = new Map(edition.editionCategories.map((ec) => [ec.categoryId, ec]));
   const allCategoryIds = [...businessesByCategory.keys()];
   const extraCategoryIds = allCategoryIds.filter((id) => !editionCatMap.has(id));
   const extraCategories =
@@ -125,7 +120,7 @@ export async function loadPdfEditionData(
       : [];
 
   const categoryMetaMap = new Map([
-    ...edition.categories.map((ec) => [ec.categoryId, ec.category] as const),
+    ...edition.editionCategories.map((ec) => [ec.categoryId, ec.category] as const),
     ...extraCategories.map((c) => [c.id, c] as const),
   ]);
 
@@ -143,7 +138,7 @@ export async function loadPdfEditionData(
         slug: b.slug,
         addressAr: b.addressAr,
         descriptionAr: b.descriptionAr,
-        logoUrl: resolveAssetUrl(b.media?.[0]?.url ?? null),
+        logoUrl: resolveAssetUrl(b.media_files?.[0]?.url ?? null),
         ratingAverage: b.ratingAverage,
         ratingCount: b.ratingCount,
         phoneNumbers: b.phones,
@@ -158,19 +153,20 @@ export async function loadPdfEditionData(
         nameAr: meta.nameAr,
         nameEn: meta.nameEn,
         icon: meta.icon,
-        sectionTitleAr: config?.sectionTitleAr ?? null,
-        sectionIntroAr: config?.sectionIntroAr ?? null,
-        colorTheme: config?.colorTheme ?? null,
+        // These optional fields may not exist in PdfEditionCategory — use safe access
+        sectionTitleAr: (config as Record<string, unknown> | undefined)?.sectionTitleAr as string ?? null,
+        sectionIntroAr: (config as Record<string, unknown> | undefined)?.sectionIntroAr as string ?? null,
+        colorTheme: (config as Record<string, unknown> | undefined)?.colorTheme as string ?? null,
         listingTemplate: config?.listingTemplate ?? "STANDARD",
         sortMode: config?.sortMode ?? "ALPHABETICAL",
         displayOrder: config?.displayOrder ?? idx,
-        startOnNewPage: config?.startOnNewPage ?? true,
+        startOnNewPage: (config as Record<string, unknown> | undefined)?.startOnNewPage as boolean ?? true,
         businesses: mappedBusinesses,
       };
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 7. Ads
+  // ─ 7. Ads — only fields that exist in the PdfAd schema
   const allActiveAds = await prisma.pdfAd.findMany({
     where: { isActive: true },
     orderBy: { priority: "desc" },
@@ -182,13 +178,12 @@ export async function loadPdfEditionData(
       {
         id: ea.ad.id,
         titleAr: ea.ad.titleAr,
-        advertiserName: ea.ad.titleEn ?? ea.ad.titleAr ,
+        advertiserName: ea.ad.advertiserName,
         imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
-        targetUrl: ea.ad.targetUrl,
-        phone: ea.ad.phone,
+        linkUrl: ea.ad.linkUrl ?? null,
         placementType: ea.ad.placementType,
         priority: ea.ad.priority,
-        effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
+        effectivePlacement: ea.ad.placementType,
       } as PdfAdData,
     ])
   );
@@ -200,25 +195,15 @@ export async function loadPdfEditionData(
       .map((a) => ({
         id: a.id,
         titleAr: a.titleAr,
-        advertiserName: a.advertiserName,
         imageUrl: resolveAssetUrl(a.imageUrl) ?? "",
-        targetUrl: a.targetUrl,
-        phone: a.phone,
+        linkUrl: a.linkUrl ?? null,
         placementType: a.placementType,
         priority: a.priority,
         effectivePlacement: a.placementType,
       } as PdfAdData)),
   ];
 
-  // ─ 8. Profile blocks
-  const websiteProfile = edition.includeWebsiteProfile
-    ? await prisma.websiteProfileBlock.findFirst({ where: { isActive: true } })
-    : null;
-  const developerProfile = edition.includeDeveloperProfile
-    ? await prisma.developerProfileBlock.findFirst({ where: { isVisible: true } })
-    : null;
-
-  // ─ 9. Config blobs
+  // ─ 8. Config blobs
   const theme: PdfTheme = edition.themeJson
     ? { ...DEFAULT_THEME, ...(edition.themeJson as object) }
     : DEFAULT_THEME;
@@ -229,7 +214,7 @@ export async function loadPdfEditionData(
     ? { ...DEFAULT_LAYOUT, ...(edition.layoutJson as object) }
     : DEFAULT_LAYOUT;
 
-  // ─ 10. Assemble
+  // ─ 9. Assemble
   return {
     editionId: edition.id,
     editionSlug: edition.slug,
@@ -252,8 +237,9 @@ export async function loadPdfEditionData(
     isPreview,
     categorySections,
     ads,
-    websiteProfile,
-    developerProfile,
+    // Profile blocks removed — models do not exist in current schema
+    websiteProfile: null,
+    developerProfile: null,
     theme,
     margins,
     layout,

@@ -7,7 +7,6 @@
  *   - On failure: returns JSON { error }
  *
  * Auth: ADMIN or SUPER_ADMIN only.
- * This runs server-side; the heavy work (react-pdf rendering) is on the Node runtime.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,10 +17,9 @@ import { generatePdf } from "@/lib/pdf/generator";
 import { AuditAction } from "@prisma/client";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // PDF generation can take up to 2 min
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  // ─ Auth check
   let session: Awaited<ReturnType<typeof requireAdmin>>;
   try {
     session = await requireAdmin();
@@ -39,20 +37,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "editionId مطلوب" }, { status: 400 });
   }
 
-  // ─ Create job record
+  // Create job record using only fields that exist in the schema
   const job = await prisma.pdfGenerationJob.create({
     data: {
-      pdfEditionId: editionId,
+      editionId,
       status: "PROCESSING",
-      isPreview,
+      startedAt: new Date(),
     },
   });
 
   try {
-    // ─ Load data
     const input = await loadPdfEditionData(editionId, isPreview);
-
-    // ─ Generate
     const result = await generatePdf(input);
 
     if (!result.ok) {
@@ -61,7 +56,7 @@ export async function POST(req: NextRequest) {
         data: {
           status: "FAILED",
           errorMessage: result.error,
-          generatedAt: new Date(),
+          finishedAt: new Date(),
         },
       });
       await prisma.auditLog.create({
@@ -78,15 +73,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    // ─ Update job with stats
+    // Update job — only use fields defined in schema
     await prisma.pdfGenerationJob.update({
       where: { id: job.id },
       data: {
         status: "SUCCEEDED",
         pagesCount: result.pagesCount,
-        businessesCount: result.businessesCount,
-        outputFileSizeBytes: result.buffer.length,
-        generatedAt: new Date(),
+        fileSizeBytes: result.buffer.length,
+        finishedAt: new Date(),
       },
     });
 
@@ -101,13 +95,11 @@ export async function POST(req: NextRequest) {
         newValues: {
           jobId: job.id,
           pagesCount: result.pagesCount,
-          businessesCount: result.businessesCount,
           isPreview,
         },
       },
     });
 
-    // ─ Return PDF stream
     const filename = isPreview
       ? `preview-${input.editionSlug}.pdf`
       : `${input.editionSlug}.pdf`;
@@ -124,7 +116,7 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.pdfGenerationJob.update({
       where: { id: job.id },
-      data: { status: "FAILED", errorMessage: message, generatedAt: new Date() },
+      data: { status: "FAILED", errorMessage: message, finishedAt: new Date() },
     });
     return NextResponse.json({ error: message }, { status: 500 });
   }
