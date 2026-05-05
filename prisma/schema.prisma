@@ -444,7 +444,13 @@ model PdfGenerationJob {
 model PdfAd {
   id                                                        String             @id @default(cuid())
   titleAr                                                   String
+  titleEn                                                   String?
   imageUrl                                                  String
+  /// رابط الموقع الإلكتروني للمعلن
+  targetUrl                                                 String?
+  /// رقم هاتف المعلن للتواصل
+  phone                                                     String?
+  /// الحقل القديم — يُستخدم targetUrl بدلاً منه
   linkUrl                                                   String?
   categoryId                                                String?
   placementType                                             PdfAdPlacementType
@@ -455,7 +461,6 @@ model PdfAd {
   createdAt                                                 DateTime           @default(now())
   updatedAt                                                 DateTime           @updatedAt
   position_after_category_id                                String?
-  titleEn                                                   String?
   positionAfterCategoryId                                   String?
   categories_pdf_ads_categoryIdTocategories                 Category?          @relation("pdf_ads_categoryIdTocategories", fields: [categoryId], references: [id])
   categories_pdf_ads_position_after_category_idTocategories Category?          @relation("pdf_ads_position_after_category_idTocategories", fields: [position_after_category_id], references: [id])

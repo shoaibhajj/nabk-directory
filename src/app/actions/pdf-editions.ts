@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-guards";
 import { AuditAction, PdfAdPlacementType } from "@prisma/client";
 
-// ── Create Edition ────────────────────────────────────────────────────────────────────
+// ── Create Edition ──────────────────────────────────────────────────────────────────────────────────
 
 export async function createPdfEdition(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/editions");
@@ -66,7 +66,7 @@ export async function createPdfEdition(formData: FormData) {
   redirect(`/admin/pdf/editions/${edition.id}`);
 }
 
-// ── Update Edition ──────────────────────────────────────────────────────────────────
+// ── Update Edition ──────────────────────────────────────────────────────────────────────────────────
 
 export async function updatePdfEdition(editionId: string, formData: FormData) {
   const session = await requireAdmin(`/admin/pdf/editions/${editionId}/edit`);
@@ -117,7 +117,7 @@ export async function updatePdfEdition(editionId: string, formData: FormData) {
   redirect(`/admin/pdf/editions/${editionId}`);
 }
 
-// ── Set Edition Status ─────────────────────────────────────────────────────────────────
+// ── Set Edition Status ──────────────────────────────────────────────────────────────────────────────────────
 
 const STATUS_AUDIT_MAP: Record<string, AuditAction> = {
   DRAFT:     AuditAction.PDF_EDITION_UPDATED,
@@ -155,7 +155,7 @@ export async function setEditionStatus(
   revalidatePath("/admin/pdf/editions");
 }
 
-// ── Create Ad ─────────────────────────────────────────────────────────────────────────
+// ── Create Ad ───────────────────────────────────────────────────────────────────────────────────────────
 
 export async function createPdfAd(formData: FormData) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -171,12 +171,15 @@ export async function createPdfAd(formData: FormData) {
 
   const ad = await prisma.pdfAd.create({
     data: {
-      titleAr:        formData.get("titleAr") as string,
-      imageUrl:       formData.get("imageUrl") as string,
-      linkUrl:        (formData.get("linkUrl") as string) || null,
+      titleAr:                formData.get("titleAr") as string,
+      // advertiserName يُخزن في titleEn
+      titleEn:                (formData.get("advertiserName") as string) || null,
+      imageUrl:               formData.get("imageUrl") as string,
+      targetUrl:              (formData.get("targetUrl") as string) || null,
+      phone:                  (formData.get("phone") as string) || null,
       placementType,
-      priority:       Number(formData.get("priority") ?? 0),
-      isActive:       true,
+      priority:               Number(formData.get("priority") ?? 0),
+      isActive:               true,
       positionAfterCategoryId,
     },
   });
@@ -196,7 +199,7 @@ export async function createPdfAd(formData: FormData) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Update Ad ─────────────────────────────────────────────────────────────────────────
+// ── Update Ad ───────────────────────────────────────────────────────────────────────────────────────────
 
 export async function updatePdfAd(adId: string, formData: FormData) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -213,11 +216,14 @@ export async function updatePdfAd(adId: string, formData: FormData) {
   const ad = await prisma.pdfAd.update({
     where: { id: adId },
     data: {
-      titleAr:        formData.get("titleAr") as string,
-      imageUrl:       formData.get("imageUrl") as string,
-      linkUrl:        (formData.get("linkUrl") as string) || null,
+      titleAr:                formData.get("titleAr") as string,
+      // advertiserName يُخزن في titleEn
+      titleEn:                (formData.get("advertiserName") as string) || null,
+      imageUrl:               formData.get("imageUrl") as string,
+      targetUrl:              (formData.get("targetUrl") as string) || null,
+      phone:                  (formData.get("phone") as string) || null,
       placementType,
-      priority:       Number(formData.get("priority") ?? 0),
+      priority:               Number(formData.get("priority") ?? 0),
       positionAfterCategoryId,
     },
   });
@@ -237,7 +243,7 @@ export async function updatePdfAd(adId: string, formData: FormData) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Toggle Ad Active ─────────────────────────────────────────────────────────────────
+// ── Toggle Ad Active ───────────────────────────────────────────────────────────────────────────────────────
 
 export async function togglePdfAdActive(adId: string) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -263,7 +269,7 @@ export async function togglePdfAdActive(adId: string) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Delete Ad ─────────────────────────────────────────────────────────────────────────
+// ── Delete Ad ───────────────────────────────────────────────────────────────────────────────────────────
 
 export async function deletePdfAd(adId: string) {
   const session = await requireAdmin("/admin/pdf/ads");
@@ -287,7 +293,7 @@ export async function deletePdfAd(adId: string) {
   revalidatePath("/admin/pdf/ads");
 }
 
-// ── Upsert Website Profile Block ──────────────────────────────────────────────────────
+// ── Upsert Website Profile Block ──────────────────────────────────────────────────────────────────────────────────
 
 /**
  * Creates or updates the single WebsiteProfileBlock record.
@@ -338,7 +344,7 @@ export async function upsertWebsiteProfile(formData: FormData) {
   revalidatePath("/admin/pdf/profiles");
 }
 
-// ── Upsert Developer Profile Block ────────────────────────────────────────────────────
+// ── Upsert Developer Profile Block ──────────────────────────────────────────────────────────────────────────────────
 
 /**
  * Creates or updates the single DeveloperProfileBlock record.
