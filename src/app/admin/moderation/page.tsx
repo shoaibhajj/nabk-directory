@@ -21,9 +21,9 @@ export default async function ModerationPage() {
       category: true,
       city: true,
       owner: { select: { id: true, name: true, email: true } },
-      phoneNumbers: { orderBy: { displayOrder: "asc" } },
+      phones: { orderBy: { displayOrder: "asc" } },
       workingHours: { orderBy: { dayOfWeek: "asc" } },
-      mediaFiles: { take: 4, orderBy: { displayOrder: "asc" } },
+      media: { take: 4, orderBy: { displayOrder: "asc" } },
     },
     orderBy: { updatedAt: "asc" },
   });
@@ -94,19 +94,19 @@ export default async function ModerationPage() {
                     <div>
                       <div className="font-semibold">أرقام التواصل</div>
                       <ul className="text-muted-foreground">
-                        {b.phoneNumbers.map((p) => (
+                        {b.phones.map((p) => (
                           <li key={p.id} dir="ltr">
                             {p.label}: {p.number}
                           </li>
                         ))}
-                        {b.phoneNumbers.length === 0 && <li>—</li>}
+                        {b.phones.length === 0 && <li>—</li>}
                       </ul>
                     </div>
                   </div>
 
-                  {b.mediaFiles.length > 0 && (
+                  {b.media.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto">
-                      {b.mediaFiles.map((m) => (
+                      {b.media.map((m) => (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={m.id}

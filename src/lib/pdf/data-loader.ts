@@ -94,10 +94,10 @@ export async function loadPdfEditionData(
       ...(targetCategoryIds ? { categoryId: { in: targetCategoryIds } } : {}),
     },
     include: {
-      phoneNumbers: { orderBy: { displayOrder: "asc" } },
+      phones: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       category: true,
-      mediaFiles: {
+      media: {
         where: { type: "IMAGE", status: "APPROVED" },
         orderBy: { displayOrder: "asc" },
         take: 1,
@@ -143,10 +143,10 @@ export async function loadPdfEditionData(
         slug: b.slug,
         addressAr: b.addressAr,
         descriptionAr: b.descriptionAr,
-        logoUrl: resolveAssetUrl(b.mediaFiles?.[0]?.url ?? null),
+        logoUrl: resolveAssetUrl(b.media?.[0]?.url ?? null),
         ratingAverage: b.ratingAverage,
         ratingCount: b.ratingCount,
-        phoneNumbers: b.phoneNumbers,
+        phoneNumbers: b.phones,
         socialLinks: b.socialLinks,
         categoryNameAr: meta.nameAr,
         cityNameAr: edition.city.nameAr,
@@ -170,16 +170,12 @@ export async function loadPdfEditionData(
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 7. Ads — edition-linked take priority, then ALL active standalone ads
-  //
-  // Problem: admins create ads in /admin/pdf/ads but never link them to an edition.
-  // Solution: load all active PdfAds and merge, deduplicating by id.
+  // ─ 7. Ads
   const allActiveAds = await prisma.pdfAd.findMany({
     where: { isActive: true },
     orderBy: { priority: "desc" },
   });
 
-  // Build a map from edition-linked ads (these may have overridePlacement)
   const editionAdMap = new Map(
     edition.editionAds.map((ea) => [
       ea.ad.id,
@@ -197,7 +193,6 @@ export async function loadPdfEditionData(
     ])
   );
 
-  // Merge: start with edition-linked, then append any active ads not yet included
   const ads: PdfAdData[] = [
     ...editionAdMap.values(),
     ...allActiveAds
@@ -211,7 +206,7 @@ export async function loadPdfEditionData(
         phone: a.phone,
         placementType: a.placementType,
         priority: a.priority,
-        effectivePlacement: a.placementType, // no override for standalone ads
+        effectivePlacement: a.placementType,
       } as PdfAdData)),
   ];
 
