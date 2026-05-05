@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PdfLegacyFile, PdfLegacyOpenMode, PdfLegacySourceType } from "@prisma/client";
+import { LegacyPdfConfig, PdfLegacyOpenMode, PdfLegacySourceType } from "@prisma/client";
 import {
   upsertLegacyPdf,
   toggleLegacyPdfPublish,
@@ -26,7 +26,7 @@ const SOURCE_TYPE_LABELS: Record<PdfLegacySourceType, string> = {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  initialRecords: PdfLegacyFile[];
+  initialRecords: LegacyPdfConfig[];
 }
 
 const EMPTY_FORM = {
@@ -62,7 +62,7 @@ export default function LegacyPdfManager({ initialRecords }: Props) {
     setShowForm(true);
   }
 
-  function openEdit(r: PdfLegacyFile) {
+  function openEdit(r: LegacyPdfConfig) {
     setForm({
       id: r.id,
       titleAr: r.titleAr,

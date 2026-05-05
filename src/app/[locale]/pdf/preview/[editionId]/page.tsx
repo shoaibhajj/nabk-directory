@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { FileDown, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { getPublishedEditionById } from "@/features/pdf/queries";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -49,12 +49,14 @@ export default async function EditionPreviewPage({
           {lastJob && (
             <div className="mb-5 grid grid-cols-3 gap-3 rounded-xl bg-background p-4">
               <Stat label="عدد الصفحات" value={lastJob.pagesCount ?? "—"} />
-              <Stat label="عدد المنشآت" value={lastJob.businessesCount ?? "—"} />
+              <Stat label="حجم الملف" value={lastJob.fileSizeBytes ? `${(lastJob.fileSizeBytes / 1024).toFixed(0)} KB` : "—"} />
               <Stat
                 label="تاريخ التوليد"
                 value={
-                  lastJob.generatedAt
-                    ? new Date(lastJob.generatedAt).toLocaleDateString("ar-SY")
+                  lastJob.finishedAt
+                    ? new Date(lastJob.finishedAt).toLocaleDateString("ar-SY")
+                    : lastJob.createdAt
+                    ? new Date(lastJob.createdAt).toLocaleDateString("ar-SY")
                     : "—"
                 }
               />

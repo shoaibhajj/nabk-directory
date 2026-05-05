@@ -19,7 +19,7 @@ export async function PdfHeroButtons() {
     getLatestPublishedEdition(),
   ]);
 
-  const hasLegacy = legacy?.isActive && legacy.fileUrl;
+  const hasLegacy = legacy?.isPublished && legacy.fileUrl;
   const hasLatest = !!latest;
 
   if (!hasLegacy && !hasLatest) return null;
@@ -42,11 +42,6 @@ export async function PdfHeroButtons() {
             >
               <FileDown className="h-4 w-4" />
               {legacy!.titleAr ?? "تحميل الدليل"}
-              {legacy!.pageCount && (
-                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
-                  {legacy!.pageCount} صفحة
-                </span>
-              )}
             </a>
           )}
 
@@ -59,11 +54,6 @@ export async function PdfHeroButtons() {
               >
                 <BookOpen className="h-4 w-4 text-accent" />
                 {latest!.titleAr}
-                {latest!.generationJobs[0]?.businessesCount && (
-                  <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-xs text-accent">
-                    {latest!.generationJobs[0].businessesCount} منشأة
-                  </span>
-                )}
               </Link>
 
               <Link
@@ -85,8 +75,8 @@ export async function PdfHeroButtons() {
                 ? `${latest.generationJobs[0].pagesCount} صفحة`
                 : null,
               latest.city.nameAr,
-              latest.generationJobs[0].generatedAt
-                ? new Date(latest.generationJobs[0].generatedAt).toLocaleDateString(
+              latest.generationJobs[0].finishedAt
+                ? new Date(latest.generationJobs[0].finishedAt).toLocaleDateString(
                     "ar-SY",
                     { month: "long", year: "numeric" }
                   )
