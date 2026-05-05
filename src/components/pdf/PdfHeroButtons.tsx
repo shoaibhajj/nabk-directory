@@ -19,7 +19,8 @@ export async function PdfHeroButtons() {
     getLatestPublishedEdition(),
   ]);
 
-  const hasLegacy = legacy?.isPublished && legacy.fileUrl;
+  // LegacyPdfInfo exposes `isActive` (mapped from isPublished) and `fileUrl`
+  const hasLegacy = legacy?.isActive && legacy.fileUrl;
   const hasLatest = !!latest;
 
   if (!hasLegacy && !hasLatest) return null;
@@ -67,7 +68,7 @@ export async function PdfHeroButtons() {
           )}
         </div>
 
-        {/* Stats row */}
+        {/* Stats row — uses createdAt (available in select) instead of finishedAt */}
         {latest?.generationJobs[0] && (
           <p className="mt-3 text-center text-xs text-muted-foreground">
             {[
@@ -75,8 +76,8 @@ export async function PdfHeroButtons() {
                 ? `${latest.generationJobs[0].pagesCount} صفحة`
                 : null,
               latest.city.nameAr,
-              latest.generationJobs[0].finishedAt
-                ? new Date(latest.generationJobs[0].finishedAt).toLocaleDateString(
+              latest.generationJobs[0].createdAt
+                ? new Date(latest.generationJobs[0].createdAt).toLocaleDateString(
                     "ar-SY",
                     { month: "long", year: "numeric" }
                   )

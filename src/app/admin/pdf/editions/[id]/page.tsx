@@ -95,7 +95,8 @@ export default async function EditionDetailPage({
       <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
         <h2 className="mb-4 text-lg font-semibold">توليد PDF</h2>
         <div className="flex flex-wrap gap-3">
-          <GeneratePdfButton editionId={id} />
+          <GeneratePdfButton editionId={id} isPreview={false} />
+          <GeneratePdfButton editionId={id} isPreview={true} />
         </div>
       </div>
 
