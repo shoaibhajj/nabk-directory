@@ -51,7 +51,7 @@ const businessDetailInclude = {
   phones: { orderBy: { displayOrder: "asc" } },
   workingHours: { orderBy: { dayOfWeek: "asc" } },
   socialLinks: true,
-  media: {
+  media_files: {
     where: { status: "APPROVED" },
     orderBy: { displayOrder: "asc" },
   },

@@ -168,13 +168,12 @@ export async function createPdfAd(formData: FormData) {
   const positionAfterCategoryId =
     (formData.get("positionAfterCategoryId") as string) || null;
 
+  // Only use fields that exist in the DB schema
   const ad = await prisma.pdfAd.create({
     data: {
       titleAr:        formData.get("titleAr") as string,
-      advertiserName: formData.get("advertiserName") as string,
       imageUrl:       formData.get("imageUrl") as string,
-      targetUrl:      (formData.get("targetUrl") as string) || null,
-      phone:          (formData.get("phone") as string) || null,
+      linkUrl:        (formData.get("linkUrl") as string) || null,
       placementType,
       priority:       Number(formData.get("priority") ?? 0),
       isActive:       true,
@@ -215,10 +214,8 @@ export async function updatePdfAd(adId: string, formData: FormData) {
     where: { id: adId },
     data: {
       titleAr:        formData.get("titleAr") as string,
-      advertiserName: formData.get("advertiserName") as string,
       imageUrl:       formData.get("imageUrl") as string,
-      targetUrl:      (formData.get("targetUrl") as string) || null,
-      phone:          (formData.get("phone") as string) || null,
+      linkUrl:        (formData.get("linkUrl") as string) || null,
       placementType,
       priority:       Number(formData.get("priority") ?? 0),
       positionAfterCategoryId,
@@ -288,80 +285,4 @@ export async function deletePdfAd(adId: string) {
   });
 
   revalidatePath("/admin/pdf/ads");
-}
-
-// ── Upsert Website Profile ────────────────────────────────────────────────────────────
-
-export async function upsertWebsiteProfile(formData: FormData) {
-  const session = await requireAdmin("/admin/pdf/profiles");
-  const existing = await prisma.websiteProfileBlock.findFirst({ orderBy: { createdAt: "asc" } });
-
-  const data = {
-    titleAr:      formData.get("titleAr") as string,
-    shortTextAr:  (formData.get("shortTextAr") as string) || null,
-    bodyTextAr:   (formData.get("bodyTextAr") as string) || null,
-    websiteUrl:   (formData.get("websiteUrl") as string) || null,
-    supportEmail: (formData.get("supportEmail") as string) || null,
-    supportPhone: (formData.get("supportPhone") as string) || null,
-    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
-    isActive: true,
-  };
-
-  if (existing) {
-    await prisma.websiteProfileBlock.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.websiteProfileBlock.create({ data });
-  }
-
-  await prisma.auditLog.create({
-    data: {
-      actorId:    session.user.id,
-      actorEmail: session.user.email ?? "",
-      actorRole:  session.user.role,
-      action:     AuditAction.PDF_WEBSITE_PROFILE_UPDATED,
-      entityType: "WebsiteProfileBlock",
-      entityId:   existing?.id ?? "new",
-      newValues:  data,
-    },
-  });
-
-  revalidatePath("/admin/pdf/profiles");
-}
-
-// ── Upsert Developer Profile ─────────────────────────────────────────────────────────
-
-export async function upsertDeveloperProfile(formData: FormData) {
-  const session = await requireAdmin("/admin/pdf/profiles");
-  const existing = await prisma.developerProfileBlock.findFirst({ orderBy: { createdAt: "asc" } });
-
-  const data = {
-    fullName:     formData.get("fullName") as string,
-    roleTitleAr:  (formData.get("roleTitleAr") as string) || null,
-    shortBioAr:   (formData.get("shortBioAr") as string) || null,
-    portfolioUrl: (formData.get("portfolioUrl") as string) || null,
-    email:        (formData.get("email") as string) || null,
-    phone:        (formData.get("phone") as string) || null,
-    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
-    isVisible: true,
-  };
-
-  if (existing) {
-    await prisma.developerProfileBlock.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.developerProfileBlock.create({ data });
-  }
-
-  await prisma.auditLog.create({
-    data: {
-      actorId:    session.user.id,
-      actorEmail: session.user.email ?? "",
-      actorRole:  session.user.role,
-      action:     AuditAction.PDF_DEVELOPER_PROFILE_UPDATED,
-      entityType: "DeveloperProfileBlock",
-      entityId:   existing?.id ?? "new",
-      newValues:  data,
-    },
-  });
-
-  revalidatePath("/admin/pdf/profiles");
 }

@@ -15,7 +15,7 @@ export interface WizardListingData {
   addressAr: string | null;
   latitude: number | null;
   longitude: number | null;
-  phoneNumbers: { id: string; label: string; number: string }[];
+  phones: { id: string; label: string; number: string }[];
   socialLinks: { id: string; platform: string; url: string }[];
   workingHours: {
     id: string;
@@ -25,7 +25,7 @@ export interface WizardListingData {
     openTime: string | null;
     closeTime: string | null;
   }[];
-  mediaFiles: {
+  media_files: {
     id: string;
     url: string;
     storageKey: string;
@@ -37,10 +37,10 @@ export async function loadWizardListing(id: string): Promise<WizardListingData |
   const listing = await prisma.businessProfile.findFirst({
     where: { id, deletedAt: null },
     include: {
-      phoneNumbers: { orderBy: { displayOrder: "asc" } },
+      phones: { orderBy: { displayOrder: "asc" } },
       socialLinks: true,
       workingHours: { orderBy: { dayOfWeek: "asc" } },
-      mediaFiles: { orderBy: { displayOrder: "asc" } },
+      media_files: { orderBy: { displayOrder: "asc" } },
     },
   });
   if (!listing) return null;
@@ -58,10 +58,10 @@ export async function loadWizardListing(id: string): Promise<WizardListingData |
     addressAr: listing.addressAr,
     latitude: listing.latitude,
     longitude: listing.longitude,
-    phoneNumbers: listing.phoneNumbers,
+    phones: listing.phones,
     socialLinks: listing.socialLinks,
     workingHours: listing.workingHours,
-    mediaFiles: listing.mediaFiles,
+    media_files: listing.media_files,
   };
 }
 
@@ -73,8 +73,8 @@ export function computeStepCompletion(
       data.nameAr && data.nameAr !== "عمل جديد" && data.nameEn && data.nameEn.trim(),
     ),
     category: Boolean(data.categoryId && data.cityId),
-    contact: data.phoneNumbers.length > 0,
+    contact: data.phones.length > 0,
     hours: data.workingHours.length > 0,
-    photos: data.mediaFiles.length > 0,
+    photos: data.media_files.length > 0,
   };
 }

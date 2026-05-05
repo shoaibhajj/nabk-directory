@@ -25,11 +25,6 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 const NEXT_URL_RE =
   /^\/dashboard\/listings\/[A-Za-z0-9_-]+\/edit\/(basics|category|contact|hours|photos)$/;
 
-/**
- * Read `_next` from the form. If it points at a wizard step page, navigate
- * there. Called from the wizard step actions AFTER their try/catch so that
- * `redirect()`'s NEXT_REDIRECT exception is not swallowed by the catch.
- */
 function maybeContinue(formData: FormData): void {
   const next = String(formData.get("_next") ?? "").trim();
   if (next && NEXT_URL_RE.test(next)) {
@@ -63,17 +58,12 @@ async function loadOwnedListing(id: string) {
   return { session, listing };
 }
 
-/**
- * Create a brand-new draft listing for the current user and redirect into the
- * first wizard step. Called from the dashboard "+ إضافة عمل جديد" button.
- */
 export async function createDraftListingAction(): Promise<void> {
   const session = await auth();
   if (!session?.user) {
     redirect("/sign-in?callbackUrl=/dashboard/listings/new");
   }
 
-  // Pick the first city as a placeholder; the owner will refine in step 2.
   const firstCity = await prisma.city.findFirst({
     where: { isActive: true },
     orderBy: { createdAt: "asc" },
@@ -120,9 +110,6 @@ export async function createDraftListingAction(): Promise<void> {
 
 const basicsSchema = z.object({
   nameAr: z.string().trim().min(2, "اسم العمل قصير جداً").max(120),
-  // nameEn is REQUIRED — it is the source of the public slug
-  // (`/businesses/<slug>`). Latin characters only so the slug is
-  // URL-safe; users get a clear error if they try Arabic here.
   nameEn: z
     .string()
     .trim()
@@ -164,10 +151,6 @@ export async function saveBasicsAction(
     }
     const data = parsed.data;
 
-    // The public slug comes from nameEn. We refresh it whenever nameEn
-    // changes AND the listing is still DRAFT (so we don't break links to
-    // already-published pages). Once the listing goes ACTIVE the slug is
-    // frozen — admins can rename later via a dedicated tool if needed.
     const before = await prisma.businessProfile.findUnique({
       where: { id },
       select: { slug: true, nameAr: true, nameEn: true, status: true },
@@ -265,7 +248,6 @@ export async function saveCategoryLocationAction(
       return { ok: false, error: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" };
     }
 
-    // Validate the category and (optional) subcategory belong together.
     const cat = await prisma.category.findUnique({
       where: { id: parsed.data.categoryId },
       select: { id: true, parentId: true },
@@ -371,9 +353,9 @@ export async function saveContactAction(
     }
 
     await prisma.$transaction([
-      prisma.phoneNumber.deleteMany({ where: { businessProfileId: id } }),
-      prisma.socialLink.deleteMany({ where: { businessProfileId: id } }),
-      prisma.phoneNumber.createMany({
+      prisma.businessPhone.deleteMany({ where: { businessProfileId: id } }),
+      prisma.businessSocialLink.deleteMany({ where: { businessProfileId: id } }),
+      prisma.businessPhone.createMany({
         data: phones.map((p, idx) => ({
           businessProfileId: id,
           label: p.label,
@@ -381,7 +363,7 @@ export async function saveContactAction(
           displayOrder: idx,
         })),
       }),
-      prisma.socialLink.createMany({
+      prisma.businessSocialLink.createMany({
         data: socials.map((s) => ({
           businessProfileId: id,
           platform: s.platform,
@@ -489,10 +471,6 @@ export async function uploadPhotoAction(
   try {
     const { session } = await loadOwnedListing(id);
 
-    // Direct file uploads need cloud storage which isn't wired up yet
-    // (the previous stub silently returned `/placeholder.svg`, leaving owners
-    // with broken images). For now we accept only public image URLs; once
-    // object storage is provisioned we'll re-enable the file branch.
     const externalUrl = String(formData.get("externalUrl") ?? "").trim();
 
     if (!externalUrl) {
@@ -513,10 +491,6 @@ export async function uploadPhotoAction(
     const mimeType: string | undefined = undefined;
     const fileSize: number | undefined = undefined;
 
-    // Enforce the per-image cap and assign the next display order in a single
-    // serializable transaction. Counting + inserting in two separate calls
-    // lets two concurrent uploads both pass the cap check and produce 13
-    // rows; serializable isolation makes Postgres abort the loser instead.
     const created = await prisma.$transaction(
       async (tx) => {
         const count = await tx.mediaFile.count({
@@ -577,11 +551,6 @@ export async function uploadPhotoAction(
   }
 }
 
-/**
- * Save an external video link (YouTube, Vimeo, or a direct .mp4/.webm). We
- * only store the URL — the public profile renders an iframe / native player.
- * Capped at 6 videos per listing so a single owner can't bloat the page.
- */
 export async function addVideoAction(
   id: string,
   _prev: ActionResult | undefined,
@@ -603,9 +572,6 @@ export async function addVideoAction(
       };
     }
 
-    // Same serializable-cap pattern as image upload — two concurrent
-    // submissions cannot both slip past the 6-video limit or collide on
-    // displayOrder.
     const created = await prisma.$transaction(
       async (tx) => {
         const count = await tx.mediaFile.count({
@@ -670,7 +636,6 @@ export async function removePhotoAction(
     }
     await prisma.mediaFile.delete({ where: { id: mediaId } });
 
-    // If cover was removed, pick the next image as cover (or null it).
     const profile = await prisma.businessProfile.findUnique({
       where: { id },
       select: { coverImageId: true },
@@ -790,11 +755,10 @@ export async function submitForReviewAction(id: string): Promise<ActionResult> {
   try {
     const { session, listing } = await loadOwnedListing(id);
 
-    // Server-side completeness check.
     const full = await prisma.businessProfile.findUnique({
       where: { id },
       include: {
-        phoneNumbers: { take: 1 },
+        phones: { take: 1 },
         workingHours: { take: 1 },
         category: true,
         city: true,
@@ -813,16 +777,13 @@ export async function submitForReviewAction(id: string): Promise<ActionResult> {
     if (!full.categoryId || !full.cityId) {
       return { ok: false, error: "يرجى تحديد التصنيف والمدينة (الخطوة 2)" };
     }
-    if (full.phoneNumbers.length === 0) {
+    if (full.phones.length === 0) {
       return { ok: false, error: "يرجى إضافة وسيلة تواصل واحدة على الأقل (الخطوة 3)" };
     }
     if (full.workingHours.length === 0) {
       return { ok: false, error: "يرجى تحديد ساعات العمل (الخطوة 4)" };
     }
 
-    // Drafts go to PENDING. Edits to ACTIVE listings stay ACTIVE (the edit
-    // becomes immediately visible to the public — only first publication
-    // requires moderation).
     const nextStatus: BusinessStatus =
       listing.status === "DRAFT" || listing.status === "REJECTED"
         ? "PENDING"
@@ -897,8 +858,6 @@ export async function approveListingAction(id: string): Promise<ActionResult> {
       after: { status: "ACTIVE" },
     });
 
-    // Owner-facing notification + email. Both are best-effort: failures here
-    // must not roll back the approval (which has already committed).
     await createNotification({
       userId: before.owner.id,
       type: "LISTING_APPROVED",
@@ -971,7 +930,6 @@ export async function rejectListingAction(
       after: { status: "REJECTED", reason: cleanReason || null },
     });
 
-    // Owner-facing notification + email so they know to fix the issue.
     await createNotification({
       userId: before.owner.id,
       type: "LISTING_REJECTED",
