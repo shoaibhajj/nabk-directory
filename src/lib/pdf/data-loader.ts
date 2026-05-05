@@ -182,7 +182,7 @@ export async function loadPdfEditionData(
       {
         id: ea.ad.id,
         titleAr: ea.ad.titleAr,
-        advertiserName: ea.ad.advertiserName,
+        advertiserName: ea.ad.titleEn ?? ea.ad.titleAr ,
         imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
         targetUrl: ea.ad.targetUrl,
         phone: ea.ad.phone,

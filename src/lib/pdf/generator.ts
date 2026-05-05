@@ -561,12 +561,17 @@ function AdSidebarElement({
     View,
     { style: styles.adSidebarCol },
     ad.imageUrl
-      ? React.createElement(Image, { src: ad.imageUrl, style: styles.adSidebarImg })
+      ? React.createElement(Image, {
+          src: ad.imageUrl,
+          style: styles.adSidebarImg,
+        })
       : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr),
-    React.createElement(Text, { style: styles.adSidebarText }, ad.advertiserName),
-    ad.phone
-      ? React.createElement(Text, { style: [styles.adSidebarText, { color: styles.adTextPhone.color }] }, ad.phone)
-      : null
+    React.createElement(
+      Text,
+      { style: styles.adSidebarText },
+      ad.titleEn ?? ad.titleAr
+    ),
+    null
   );
 }
 
@@ -580,7 +585,11 @@ function AdSponsorBadge({
   return React.createElement(
     View,
     { style: styles.adSponsorBadge },
-    React.createElement(Text, { style: styles.adSponsorText }, `راعي: ${ad.advertiserName}`)
+    React.createElement(
+      Text,
+      { style: styles.adSponsorText },
+      `راعي: ${ad.titleEn ?? ad.titleAr}`
+    )
   );
 }
 
@@ -612,8 +621,12 @@ function StandaloneAdPage({
         View,
         { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
-        ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+        React.createElement(
+          Text,
+          { style: styles.adTextBody },
+          ad.titleEn ?? ad.titleAr
+        ),
+      null
       )
     );
   }
@@ -621,13 +634,20 @@ function StandaloneAdPage({
   // HALF_PAGE_TOP or HALF_PAGE_BOTTOM
   const isTop = placement === "HALF_PAGE_TOP";
   const halfBlock = ad.imageUrl
-    ? React.createElement(Image, { src: ad.imageUrl, style: styles.adHalfBlock })
+    ? React.createElement(Image, {
+        src: ad.imageUrl,
+        style: styles.adHalfBlock,
+      })
     : React.createElement(
         View,
         { style: [styles.adTextCard, { height: 200 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.advertiserName),
-        ad.phone ? React.createElement(Text, { style: styles.adTextPhone }, ad.phone) : null
+        React.createElement(
+          Text,
+          { style: styles.adTextBody },
+          ad.titleEn ?? ad.titleAr
+        ),
+         null
       );
 
   return React.createElement(
