@@ -198,11 +198,11 @@ export default async function PdfAdsPage() {
                     <p className="mt-1 text-sm text-muted-foreground">
                       {ad.titleEn ?? ad.titleAr}
                     </p>
-                    {ad.phone && (
+                    {/* {ad.phone && (
                       <p className="text-xs text-muted-foreground" dir="ltr">
                         {ad.phone}
                       </p>
-                    )}
+                    )} */}
                   </div>
                 </div>
 
@@ -298,25 +298,25 @@ export default async function PdfAdsPage() {
                       <label className="mb-1 block text-xs font-semibold">
                         رابط المعلن
                       </label>
-                      <input
+                      {/* <input
                         name="targetUrl"
                         defaultValue={ad.targetUrl ?? ""}
                         dir="ltr"
                         placeholder="https://..."
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      />
+                      /> */}
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold">
                         هاتف
                       </label>
-                      <input
+                      {/* <input
                         name="phone"
                         defaultValue={ad.phone ?? ""}
                         dir="ltr"
                         placeholder="+963..."
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      />
+                      /> */}
                     </div>
                     <div className="sm:col-span-2">
                       <button
