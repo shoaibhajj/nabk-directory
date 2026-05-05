@@ -137,7 +137,7 @@ async function main() {
         status: "ACTIVE",
         publishedAt: new Date(),
         searchableText: `${d.nameAr} ${d.descriptionAr}`,
-        phoneNumbers: {
+        phones: {
           create: d.phones.map((p, i) => ({
             label: p.label,
             number: p.number,
@@ -147,7 +147,7 @@ async function main() {
         workingHours: {
           create: Array.from({ length: 7 }, (_, i) => ({
             dayOfWeek: i,
-            isOpen: i !== 5, // Friday closed for demo variety
+            isOpen: i !== 5,
             openTime: i !== 5 ? "09:00" : null,
             closeTime: i !== 5 ? "22:00" : null,
           })),

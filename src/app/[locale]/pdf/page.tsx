@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileDown, BookOpen, Calendar, Building2 } from "lucide-react";
+import { FileDown, BookOpen, Calendar } from "lucide-react";
 import { getPublishedEditions, getLegacyPdfConfig } from "@/features/pdf/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,14 +62,8 @@ export default async function PdfDirectoryPage() {
                     {legacy.descriptionAr}
                   </p>
                 )}
-                <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  {legacy.pageCount && (
-                    <span className="flex items-center gap-1">
-                      <BookOpen className="h-3.5 w-3.5" />
-                      {legacy.pageCount} صفحة
-                    </span>
-                  )}
-                  {legacy.publishedAt && (
+                {legacy.publishedAt && (
+                  <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" />
                       {new Date(legacy.publishedAt).toLocaleDateString("ar-SY", {
@@ -77,14 +71,8 @@ export default async function PdfDirectoryPage() {
                         month: "long",
                       })}
                     </span>
-                  )}
-                  {legacy.businessCount && (
-                    <span className="flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5" />
-                      {legacy.businessCount} منشأة
-                    </span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
               <a
                 href={legacy.fileUrl}
@@ -126,11 +114,8 @@ export default async function PdfDirectoryPage() {
                           {lastJob.pagesCount && (
                             <span>{lastJob.pagesCount} صفحة</span>
                           )}
-                          {lastJob.businessesCount && (
-                            <span>{lastJob.businessesCount} منشأة</span>
-                          )}
-                          {lastJob.outputFileSizeBytes && (
-                            <span>{formatBytes(lastJob.outputFileSizeBytes)}</span>
+                          {lastJob.fileSizeBytes && (
+                            <span>{formatBytes(lastJob.fileSizeBytes)}</span>
                           )}
                         </div>
                       )}

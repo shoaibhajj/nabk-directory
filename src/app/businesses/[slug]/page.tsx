@@ -40,10 +40,6 @@ export default async function BusinessDetailPage({
   const sp = await searchParams;
   const lookup = await getBusinessBySlugOrId(slug);
   if (!lookup) notFound();
-  // Old `/businesses/<cuid>` links are matched by id and 308'd to the
-  // canonical slug URL so existing bookmarks, share-cards, and search engines
-  // converge on a single permalink. `permanentRedirect` issues HTTP 308 so
-  // method+body are preserved and the redirect is cacheable by intermediaries.
   if (lookup.matchedBy === "id") {
     permanentRedirect(`/businesses/${lookup.business.slug}`);
   }
@@ -63,20 +59,17 @@ export default async function BusinessDetailPage({
     getCommentsForBusiness(business.id, viewerId, isAdmin, commentsPage),
   ]);
 
-  // Increment view + fire owner milestone notifications (silent on failure).
-  // Skip self-views by the owner so the counter reflects external interest
-  // and the owner doesn't trigger their own "you reached X views" pings.
   if (!ownsBusiness) {
     await trackBusinessView(business.id);
   }
 
   const status = isOpenNow(business.workingHours);
-  const phones = business.phoneNumbers;
+  const phones = business.phones;
   const whatsappPhone = phones.find((p) => p.label === "WHATSAPP")?.number ?? phones[0]?.number;
-  const images = business.mediaFiles
+  const images = business.media_files
     .filter((m) => m.type === "IMAGE")
     .map((m) => ({ id: m.id, url: m.url }));
-  const videos = business.mediaFiles
+  const videos = business.media_files
     .filter((m) => m.type === "VIDEO")
     .map((m) => ({ id: m.id, url: m.url }));
   const CategoryIcon = getCategoryIcon(business.category.slug);
@@ -108,7 +101,6 @@ export default async function BusinessDetailPage({
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <div className="flex flex-wrap items-start gap-4">
-              {/* Letter-avatar tile (matches reference site) */}
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-muted text-4xl font-bold text-muted-foreground shadow-soft md:h-24 md:w-24">
                 {initial}
               </div>

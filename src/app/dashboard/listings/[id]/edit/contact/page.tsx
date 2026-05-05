@@ -34,7 +34,7 @@ export default async function ContactStepPage({
       <ContactForm
         id={id}
         action={action}
-        initialPhones={data.phoneNumbers.map((p) => ({
+        initialPhones={data.phones.map((p) => ({
           label: p.label,
           number: p.number,
         }))}

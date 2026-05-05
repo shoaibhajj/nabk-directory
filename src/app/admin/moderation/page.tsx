@@ -23,7 +23,7 @@ export default async function ModerationPage() {
       owner: { select: { id: true, name: true, email: true } },
       phones: { orderBy: { displayOrder: "asc" } },
       workingHours: { orderBy: { dayOfWeek: "asc" } },
-      media: { take: 4, orderBy: { displayOrder: "asc" } },
+      media_files: { take: 4, orderBy: { displayOrder: "asc" } },
     },
     orderBy: { updatedAt: "asc" },
   });
@@ -104,9 +104,9 @@ export default async function ModerationPage() {
                     </div>
                   </div>
 
-                  {b.media.length > 0 && (
+                  {b.media_files.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto">
-                      {b.media.map((m) => (
+                      {b.media_files.map((m) => (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           key={m.id}

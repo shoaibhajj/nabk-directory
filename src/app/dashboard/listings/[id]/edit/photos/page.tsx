@@ -21,8 +21,8 @@ export default async function PhotosStepPage({
   const completion = computeStepCompletion(data);
   const allDone = Object.values(completion).every(Boolean);
 
-  const images = data.mediaFiles.filter((m) => m.type === "IMAGE");
-  const videos = data.mediaFiles.filter((m) => m.type === "VIDEO");
+  const images = data.media_files.filter((m) => m.type === "IMAGE");
+  const videos = data.media_files.filter((m) => m.type === "VIDEO");
 
   return (
     <div className="space-y-6">

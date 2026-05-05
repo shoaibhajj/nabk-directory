@@ -113,9 +113,6 @@ export async function postCommentAction(
     },
   });
 
-  // Only ping the owner when the comment is actually visible to the public
-  // (PENDING_REVIEW comments may never be approved, so a notification then
-  // would be premature) and when they are not the commenter themselves.
   if (status === "VISIBLE" && business.ownerId !== user.id) {
     const preview =
       parsed.data.content.length > 90
@@ -293,31 +290,27 @@ export async function adminHideCommentAction(
   return { ok: true };
 }
 
-// Notify the business owner when an admin approves a previously-pending
-// comment, since the original `postCommentAction` ping was suppressed at
-// PENDING_REVIEW. We extend `adminApproveCommentAction` here rather than
-// adding a second action so the audit log stays consistent.
 async function notifyOwnerOnApprove(commentId: string) {
   const c = await prisma.comment.findUnique({
     where: { id: commentId },
     select: {
       content: true,
       userId: true,
-      business: {
+      business_profiles: {
         select: { id: true, ownerId: true, nameAr: true },
       },
     },
   });
-  if (!c || !c.business) return;
-  if (c.business.ownerId === c.userId) return;
+  if (!c || !c.business_profiles) return;
+  if (c.business_profiles.ownerId === c.userId) return;
   const preview =
     c.content.length > 90 ? `${c.content.slice(0, 90)}…` : c.content;
   await createNotification({
-    userId: c.business.ownerId,
+    userId: c.business_profiles.ownerId,
     type: "COMMENT_NEW",
-    titleAr: `تعليق جديد على «${c.business.nameAr}»`,
+    titleAr: `تعليق جديد على «${c.business_profiles.nameAr}»`,
     messageAr: preview,
     relatedEntityType: "BusinessProfile",
-    relatedEntityId: c.business.id,
+    relatedEntityId: c.business_profiles.id,
   });
 }

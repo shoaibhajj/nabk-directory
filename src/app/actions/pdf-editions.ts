@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-guards";
 import { AuditAction, PdfAdPlacementType } from "@prisma/client";
@@ -57,7 +58,7 @@ export async function createPdfEdition(formData: FormData) {
       action:     AuditAction.PDF_EDITION_CREATED,
       entityType: "PdfEdition",
       entityId:   edition.id,
-      newValues:  { titleAr, slug, cityId, cityIds },
+      newValues:  { titleAr, slug, cityId, cityIds } as Prisma.InputJsonValue,
     },
   });
 
@@ -107,7 +108,7 @@ export async function updatePdfEdition(editionId: string, formData: FormData) {
       action:     AuditAction.PDF_EDITION_UPDATED,
       entityType: "PdfEdition",
       entityId:   editionId,
-      newValues:  data,
+      newValues:  data as Prisma.InputJsonValue,
     },
   });
 
@@ -146,7 +147,7 @@ export async function setEditionStatus(
       action:     STATUS_AUDIT_MAP[status] ?? AuditAction.PDF_EDITION_UPDATED,
       entityType: "PdfEdition",
       entityId:   editionId,
-      newValues:  { status },
+      newValues:  { status } as Prisma.InputJsonValue,
     },
   });
 
@@ -168,7 +169,6 @@ export async function createPdfAd(formData: FormData) {
   const positionAfterCategoryId =
     (formData.get("positionAfterCategoryId") as string) || null;
 
-  // Only use fields that exist in the DB schema
   const ad = await prisma.pdfAd.create({
     data: {
       titleAr:        formData.get("titleAr") as string,
@@ -189,7 +189,7 @@ export async function createPdfAd(formData: FormData) {
       action:     AuditAction.PDF_AD_CREATED,
       entityType: "PdfAd",
       entityId:   ad.id,
-      newValues:  { titleAr: ad.titleAr, placementType, positionAfterCategoryId },
+      newValues:  { titleAr: ad.titleAr, placementType, positionAfterCategoryId } as Prisma.InputJsonValue,
     },
   });
 
@@ -230,7 +230,7 @@ export async function updatePdfAd(adId: string, formData: FormData) {
       action:     AuditAction.PDF_AD_UPDATED,
       entityType: "PdfAd",
       entityId:   adId,
-      newValues:  { titleAr: ad.titleAr, placementType, priority: ad.priority, positionAfterCategoryId },
+      newValues:  { titleAr: ad.titleAr, placementType, priority: ad.priority, positionAfterCategoryId } as Prisma.InputJsonValue,
     },
   });
 
@@ -256,7 +256,7 @@ export async function togglePdfAdActive(adId: string) {
       action:     updated.isActive ? AuditAction.PDF_AD_ACTIVATED : AuditAction.PDF_AD_DEACTIVATED,
       entityType: "PdfAd",
       entityId:   adId,
-      newValues:  { isActive: updated.isActive },
+      newValues:  { isActive: updated.isActive } as Prisma.InputJsonValue,
     },
   });
 
@@ -280,7 +280,7 @@ export async function deletePdfAd(adId: string) {
       action:     AuditAction.PDF_AD_DELETED,
       entityType: "PdfAd",
       entityId:   adId,
-      newValues:  { titleAr: ad.titleAr },
+      newValues:  { titleAr: ad.titleAr } as Prisma.InputJsonValue,
     },
   });
 

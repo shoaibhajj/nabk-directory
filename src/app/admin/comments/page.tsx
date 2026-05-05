@@ -104,10 +104,10 @@ export default async function AdminCommentsPage({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
-                    href={`/businesses/${c.business.slug}`}
+                    href={`/businesses/${c.business_profiles.slug}`}
                     className="text-sm font-semibold hover:text-accent"
                   >
-                    على «{c.business.nameAr}»
+                    على «{c.business_profiles.nameAr}»
                   </Link>
                   <Badge
                     variant={
