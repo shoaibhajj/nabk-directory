@@ -310,16 +310,16 @@ model Country {
 }
 
 model City {
-  id        String            @id @default(cuid())
-  countryId String?
-  nameAr    String
-  nameEn    String
-  slug      String            @unique
-  isActive  Boolean           @default(true)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @default(now()) @updatedAt
-  country   Country?          @relation(fields: [countryId], references: [id])
-  listings  BusinessProfile[]
+  id          String            @id @default(cuid())
+  countryId   String?
+  nameAr      String
+  nameEn      String
+  slug        String            @unique
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @default(now()) @updatedAt
+  country     Country?          @relation(fields: [countryId], references: [id])
+  listings    BusinessProfile[]
   pdfEditions PdfEdition[]
 
   @@index([countryId])
@@ -342,8 +342,10 @@ model Category {
   updatedAt    DateTime          @updatedAt
   listings     BusinessProfile[]
   subListings  BusinessProfile[] @relation("Subcategory")
-  pdfEditionCategories PdfEditionCategory[]
-  pdfAds       PdfAd[]
+
+  pdfEditionCategories  PdfEditionCategory[]
+  pdfAds                PdfAd[]
+  pdfAdsPositionAfter   PdfAd[]              @relation("PdfAdPositionAfter")
 
   @@map("categories")
 }
@@ -390,17 +392,17 @@ model BusinessProfile {
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
 
-  owner       User      @relation(fields: [ownerId], references: [id])
-  city        City      @relation(fields: [cityId], references: [id])
-  category    Category  @relation(fields: [categoryId], references: [id])
-  subcategory Category? @relation("Subcategory", fields: [subcategoryId], references: [id])
-  phones      BusinessPhone[]
-  socialLinks BusinessSocialLink[]
+  owner        User      @relation(fields: [ownerId], references: [id])
+  city         City      @relation(fields: [cityId], references: [id])
+  category     Category  @relation(fields: [categoryId], references: [id])
+  subcategory  Category? @relation("Subcategory", fields: [subcategoryId], references: [id])
+  phones       BusinessPhone[]
+  socialLinks  BusinessSocialLink[]
   workingHours WorkingHours[]
-  media       BusinessMedia[]
-  tags        BusinessTag[]
-  ratings     Rating[]
-  comments    Comment[]
+  media        BusinessMedia[]
+  tags         BusinessTag[]
+  ratings      Rating[]
+  comments     Comment[]
 
   @@index([cityId])
   @@index([categoryId])
@@ -410,13 +412,13 @@ model BusinessProfile {
 }
 
 model BusinessPhone {
-  id         String     @id @default(cuid())
-  profileId  String
-  number     String
-  label      PhoneLabel @default(MOBILE)
-  isPrimary  Boolean    @default(false)
-  createdAt  DateTime   @default(now())
-  profile    BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id        String     @id @default(cuid())
+  profileId String
+  number    String
+  label     PhoneLabel @default(MOBILE)
+  isPrimary Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@map("business_phones")
 }
@@ -433,31 +435,31 @@ model BusinessSocialLink {
 }
 
 model WorkingHours {
-  id         String   @id @default(cuid())
-  profileId  String
-  dayOfWeek  Int
-  openTime   String?
-  closeTime  String?
-  isClosed   Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  profile    BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  profileId String
+  dayOfWeek Int
+  openTime  String?
+  closeTime String?
+  isClosed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, dayOfWeek])
   @@map("working_hours")
 }
 
 model BusinessMedia {
-  id          String      @id @default(cuid())
-  profileId   String
-  type        MediaType   @default(IMAGE)
-  url         String
-  caption     String?
-  displayOrder Int        @default(0)
-  status      MediaStatus @default(PENDING)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  profile     BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id           String      @id @default(cuid())
+  profileId    String
+  type         MediaType   @default(IMAGE)
+  url          String
+  caption      String?
+  displayOrder Int         @default(0)
+  status       MediaStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  profile      BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@map("business_media")
@@ -521,18 +523,18 @@ model Notification {
 }
 
 model AuditLog {
-  id          String      @id @default(cuid())
-  actorId     String
-  actorEmail  String
-  actorRole   Role
-  action      AuditAction
-  entityType  String
-  entityId    String
-  newValues   Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime    @default(now())
-  actor       User        @relation(fields: [actorId], references: [id])
+  id         String      @id @default(cuid())
+  actorId    String
+  actorEmail String
+  actorRole  Role
+  action     AuditAction
+  entityType String
+  entityId   String
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+  actor      User        @relation(fields: [actorId], references: [id])
 
   @@index([actorId])
   @@index([entityType, entityId])
@@ -540,7 +542,7 @@ model AuditLog {
 }
 
 model MediaFile {
-  id           String      @id @default(cuid())
+  id           String   @id @default(cuid())
   url          String
   thumbnailUrl String?
   mimeType     String
@@ -548,28 +550,28 @@ model MediaFile {
   width        Int?
   height       Int?
   altAr        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("media_files")
 }
 
 model ContactMessage {
-  id           String               @id @default(cuid())
-  senderId     String?
-  senderName   String
-  senderEmail  String
-  subject      String
-  body         String               @db.Text
-  status       ContactMessageStatus @default(NEW)
-  adminNote    String?              @db.Text
-  repliedById  String?
-  repliedAt    DateTime?
-  replyBody    String?              @db.Text
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  sender       User?                @relation("ContactSender", fields: [senderId], references: [id])
-  repliedBy    User?                @relation("ContactReplier", fields: [repliedById], references: [id])
+  id          String               @id @default(cuid())
+  senderId    String?
+  senderName  String
+  senderEmail String
+  subject     String
+  body        String               @db.Text
+  status      ContactMessageStatus @default(NEW)
+  adminNote   String?              @db.Text
+  repliedById String?
+  repliedAt   DateTime?
+  replyBody   String?              @db.Text
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  sender      User?                @relation("ContactSender", fields: [senderId], references: [id])
+  repliedBy   User?                @relation("ContactReplier", fields: [repliedById], references: [id])
 
   @@index([status, createdAt(sort: Desc)])
   @@map("contact_messages")
@@ -581,23 +583,23 @@ model ContactMessage {
 
 /// Singleton legacy PDF config (one per city or global)
 model LegacyPdfConfig {
-  id             String               @id @default(cuid())
-  cityId         String?              @unique
-  titleAr        String               @default("الدليل القديم")
-  titleEn        String?
-  descriptionAr  String?
-  descriptionEn  String?
-  buttonLabelAr  String               @default("الدليل القديم")
-  buttonLabelEn  String?
-  coverImageUrl  String?
-  sourceType     PdfLegacySourceType  @default(EXTERNAL_URL)
-  fileUrl        String?              // Cloudinary / R2 URL when sourceType = FILE
-  externalUrl    String?              // direct external link when sourceType = EXTERNAL_URL
-  openMode       PdfLegacyOpenMode    @default(OPEN_IN_NEW_TAB)
-  isPublished    Boolean              @default(false)
-  publishedAt    DateTime?
-  updatedAt      DateTime             @updatedAt
-  createdAt      DateTime             @default(now())
+  id            String              @id @default(cuid())
+  cityId        String?             @unique
+  titleAr       String              @default("الدليل القديم")
+  titleEn       String?
+  descriptionAr String?
+  descriptionEn String?
+  buttonLabelAr String              @default("الدليل القديم")
+  buttonLabelEn String?
+  coverImageUrl String?
+  sourceType    PdfLegacySourceType @default(EXTERNAL_URL)
+  fileUrl       String?
+  externalUrl   String?
+  openMode      PdfLegacyOpenMode   @default(OPEN_IN_NEW_TAB)
+  isPublished   Boolean             @default(false)
+  publishedAt   DateTime?
+  updatedAt     DateTime            @updatedAt
+  createdAt     DateTime            @default(now())
 
   @@map("legacy_pdf_configs")
 }
@@ -633,10 +635,10 @@ model PdfEdition {
   createdAt                 DateTime         @default(now())
   updatedAt                 DateTime         @updatedAt
 
-  city             City                 @relation(fields: [cityId], references: [id])
-  generationJobs   PdfGenerationJob[]
+  city              City                 @relation(fields: [cityId], references: [id])
+  generationJobs    PdfGenerationJob[]
   editionCategories PdfEditionCategory[]
-  editionAds       PdfEditionAd[]
+  editionAds        PdfEditionAd[]
 
   @@index([cityId])
   @@index([status])
@@ -645,18 +647,18 @@ model PdfEdition {
 
 /// Async job that generates a PDF edition
 model PdfGenerationJob {
-  id             String       @id @default(cuid())
-  editionId      String
-  triggeredById  String?
-  status         PdfJobStatus @default(QUEUED)
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  errorMessage   String?
-  outputFileUrl  String?
-  pagesCount     Int?
-  fileSizeBytes  Int?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id            String       @id @default(cuid())
+  editionId     String
+  triggeredById String?
+  status        PdfJobStatus @default(QUEUED)
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  errorMessage  String?
+  outputFileUrl String?
+  pagesCount    Int?
+  fileSizeBytes Int?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   edition PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
@@ -666,20 +668,20 @@ model PdfGenerationJob {
 
 /// Ad that appears inside a PDF edition
 model PdfAd {
-  id                       String             @id @default(cuid())
-  titleAr                  String
-  titleEn                  String?
-  imageUrl                 String
-  linkUrl                  String?
-  placementType            PdfAdPlacementType @default(FULL_PAGE)
-  categoryId               String?
-  positionAfterCategoryId  String?
-  priority                 Int                @default(0)
-  isActive                 Boolean            @default(true)
-  startsAt                 DateTime?
-  endsAt                   DateTime?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  id                      String             @id @default(cuid())
+  titleAr                 String
+  titleEn                 String?
+  imageUrl                String
+  linkUrl                 String?
+  placementType           PdfAdPlacementType @default(FULL_PAGE)
+  categoryId              String?
+  positionAfterCategoryId String?
+  priority                Int                @default(0)
+  isActive                Boolean            @default(true)
+  startsAt                DateTime?
+  endsAt                  DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 
   category              Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   positionAfterCategory Category?      @relation("PdfAdPositionAfter", fields: [positionAfterCategoryId], references: [id], onDelete: SetNull)
@@ -704,15 +706,15 @@ model PdfEditionAd {
 
 /// Which categories are included in a specific edition, with settings
 model PdfEditionCategory {
-  id               String              @id @default(cuid())
-  editionId        String
-  categoryId       String
-  displayOrder     Int                 @default(0)
-  listingTemplate  PdfListingTemplate  @default(STANDARD)
-  sortMode         PdfSortMode         @default(FEATURED_FIRST)
-  maxListings      Int?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  id              String             @id @default(cuid())
+  editionId       String
+  categoryId      String
+  displayOrder    Int                @default(0)
+  listingTemplate PdfListingTemplate @default(STANDARD)
+  sortMode        PdfSortMode        @default(FEATURED_FIRST)
+  maxListings     Int?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   edition  PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
   category Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
