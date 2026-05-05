@@ -5,18 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Phone, MapPin, Clock, Star } from "lucide-react";
 import { isOpenNow } from "@/lib/working-hours";
 import { getCategoryIcon } from "@/components/business/category-icons";
-import type { BusinessProfile, Category, PhoneNumber, WorkingHours } from "@prisma/client";
+import type { BusinessCardData } from "@/features/businesses/queries";
 
-type CardData = BusinessProfile & {
-  category: Category;
-  subcategory: Category | null;
-  phoneNumbers: PhoneNumber[];
-  workingHours: WorkingHours[];
-};
-
-export function BusinessCard({ business }: { business: CardData }) {
+export function BusinessCard({ business }: { business: BusinessCardData }) {
   const status = isOpenNow(business.workingHours);
-  const phone = business.phoneNumbers[0]?.number;
+  const phone = business.phones[0]?.number;
   const CategoryIcon = getCategoryIcon(business.category.slug);
 
   return (
@@ -46,7 +39,6 @@ export function BusinessCard({ business }: { business: CardData }) {
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-         
             {business.ratingCount > 0 && (
               <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
                 <Star className="h-3.5 w-3.5 fill-[var(--color-star)] text-[var(--color-star)]" />
