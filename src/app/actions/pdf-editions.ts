@@ -286,3 +286,105 @@ export async function deletePdfAd(adId: string) {
 
   revalidatePath("/admin/pdf/ads");
 }
+
+// ── Upsert Website Profile Block ──────────────────────────────────────────────────────
+
+/**
+ * Creates or updates the single WebsiteProfileBlock record.
+ * Used by /admin/pdf/profiles to configure the website info block
+ * that appears in generated PDF editions.
+ */
+export async function upsertWebsiteProfile(formData: FormData) {
+  const session = await requireAdmin("/admin/pdf/profiles");
+
+  const data = {
+    titleAr:      (formData.get("titleAr") as string)?.trim() || "",
+    shortTextAr:  (formData.get("shortTextAr") as string) || null,
+    bodyTextAr:   (formData.get("bodyTextAr") as string) || null,
+    websiteUrl:   (formData.get("websiteUrl") as string) || null,
+    supportEmail: (formData.get("supportEmail") as string) || null,
+    supportPhone: (formData.get("supportPhone") as string) || null,
+    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
+  };
+
+  if (!data.titleAr) {
+    throw new Error("عنوان البلوك مطلوب");
+  }
+
+  const existing = await prisma.websiteProfileBlock.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  const record = existing
+    ? await prisma.websiteProfileBlock.update({
+        where: { id: existing.id },
+        data,
+      })
+    : await prisma.websiteProfileBlock.create({ data });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId:    session.user.id,
+      actorEmail: session.user.email ?? "",
+      actorRole:  session.user.role,
+      action:     AuditAction.PDF_EDITION_UPDATED,
+      entityType: "WebsiteProfileBlock",
+      entityId:   record.id,
+      newValues:  data as Prisma.InputJsonValue,
+    },
+  });
+
+  revalidatePath("/admin/pdf/profiles");
+}
+
+// ── Upsert Developer Profile Block ────────────────────────────────────────────────────
+
+/**
+ * Creates or updates the single DeveloperProfileBlock record.
+ * Used by /admin/pdf/profiles to configure the developer bio block
+ * that appears in generated PDF editions.
+ */
+export async function upsertDeveloperProfile(formData: FormData) {
+  const session = await requireAdmin("/admin/pdf/profiles");
+
+  const data = {
+    fullName:     (formData.get("fullName") as string)?.trim() || "",
+    roleTitleAr:  (formData.get("roleTitleAr") as string) || null,
+    shortBioAr:   (formData.get("shortBioAr") as string) || null,
+    portfolioUrl: (formData.get("portfolioUrl") as string) || null,
+    email:        (formData.get("email") as string) || null,
+    phone:        (formData.get("phone") as string) || null,
+    ctaTextAr:    (formData.get("ctaTextAr") as string) || null,
+  };
+
+  if (!data.fullName) {
+    throw new Error("الاسم الكامل مطلوب");
+  }
+
+  const existing = await prisma.developerProfileBlock.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  const record = existing
+    ? await prisma.developerProfileBlock.update({
+        where: { id: existing.id },
+        data,
+      })
+    : await prisma.developerProfileBlock.create({ data });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId:    session.user.id,
+      actorEmail: session.user.email ?? "",
+      actorRole:  session.user.role,
+      action:     AuditAction.PDF_EDITION_UPDATED,
+      entityType: "DeveloperProfileBlock",
+      entityId:   record.id,
+      newValues:  data as Prisma.InputJsonValue,
+    },
+  });
+
+  revalidatePath("/admin/pdf/profiles");
+}
