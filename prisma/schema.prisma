@@ -260,7 +260,6 @@ model Rating {
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([businessProfileId, userId])
-  @@index([businessProfileId])
   @@map("ratings")
 }
 
@@ -268,20 +267,53 @@ model Comment {
   id                String          @id @default(cuid())
   businessProfileId String
   userId            String
-  content           String
-  status            CommentStatus   @default(VISIBLE)
-  hiddenReason      String?
   parentId          String?
+  content           String
+  status            CommentStatus   @default(PENDING_REVIEW)
+  adminNote         String?
+  deletedAt         DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
-  deletedAt         DateTime?
   business_profiles BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent            Comment?        @relation("CommentReplies", fields: [parentId], references: [id])
   replies           Comment[]       @relation("CommentReplies")
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([businessProfileId, createdAt(sort: Desc)])
   @@map("comments")
+}
+
+model MediaFile {
+  id                String          @id @default(cuid())
+  businessProfileId String
+  url               String
+  type              MediaType       @default(IMAGE)
+  caption           String?
+  displayOrder      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  business_profiles BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+}
+
+model ContactMessage {
+  id          String               @id @default(cuid())
+  userId      String?
+  name        String
+  email       String
+  subject     String?
+  message     String
+  status      ContactMessageStatus @default(NEW)
+  ipHash      String?
+  userAgent   String?
+  reply       String?
+  repliedAt   DateTime?
+  repliedById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  repliedBy   User?                @relation("ContactReplier", fields: [repliedById], references: [id])
+  user        User?                @relation("contact_messages_userIdTousers", fields: [userId], references: [id])
+
+  @@map("contact_messages")
 }
 
 model Notification {
@@ -296,6 +328,7 @@ model Notification {
   createdAt         DateTime @default(now())
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
@@ -313,234 +346,175 @@ model AuditLog {
   createdAt      DateTime    @default(now())
   actor          User?       @relation(fields: [actorId], references: [id])
 
+  @@index([entityType, entityId])
   @@map("audit_logs")
 }
 
-model MediaFile {
-  id                String          @id @default(cuid())
-  businessProfileId String
-  uploadedById      String
-  type              MediaType
-  storageKey        String
-  url               String
-  thumbnailUrl      String?
-  fileSize          Int?
-  mimeType          String?
-  width             Int?
-  height            Int?
-  duration          Int?
-  status            MediaStatus     @default(APPROVED)
-  rejectionReason   String?
-  displayOrder      Int             @default(0)
-  createdAt         DateTime        @default(now())
-  business_profiles BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-
-  @@map("media_files")
-}
-
-model ContactMessage {
-  id                                   String               @id @default(cuid())
-  name                                 String
-  email                                String
-  subject                              String?
-  message                              String
-  status                               ContactMessageStatus @default(NEW)
-  ipHash                               String?
-  userAgent                            String?
-  userId                               String?
-  reply                                String?
-  repliedAt                            DateTime?
-  repliedById                          String?
-  createdAt                            DateTime             @default(now())
-  updatedAt                            DateTime             @updatedAt
-  repliedBy                            User?                @relation("ContactReplier", fields: [repliedById], references: [id])
-  users_contact_messages_userIdTousers User?                @relation("contact_messages_userIdTousers", fields: [userId], references: [id])
-
-  @@index([status, createdAt])
-  @@index([userId])
-  @@map("contact_messages")
-}
-
-/// Singleton legacy PDF config (one per city or global)
 model LegacyPdfConfig {
-  id            String              @id(map: "pdf_legacy_files_pkey") @default(cuid())
-  titleAr       String
-  titleEn       String?
-  descriptionAr String?
-  descriptionEn String?
-  sourceType    PdfLegacySourceType
-  fileUrl       String?
-  externalUrl   String?
-  coverImageUrl String?
-  buttonLabelAr String              @default("الدليل القديم")
-  buttonLabelEn String?             @default("Old Directory")
-  openMode      PdfLegacyOpenMode   @default(OPEN_IN_NEW_TAB)
-  isPublished   Boolean             @default(false)
-  publishedAt   DateTime?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  cityId        String?             @unique
+  id             String              @id @default(cuid())
+  titleAr        String
+  titleEn        String?
+  descriptionAr  String?
+  descriptionEn  String?
+  sourceType     PdfLegacySourceType
+  fileUrl        String?
+  externalUrl    String?
+  coverImageUrl  String?
+  buttonLabelAr  String              @default("الدليل القديم")
+  buttonLabelEn  String?
+  openMode       PdfLegacyOpenMode   @default(PREVIEW)
+  isPublished    Boolean             @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@map("legacy_pdf_configs")
 }
 
-/// A generated directory edition
 model PdfEdition {
   id                        String               @id @default(cuid())
-  cityId                    String
   titleAr                   String
-  titleEn                   String?
   slug                      String               @unique
+  cityId                    String
+  cityIdsJson               String               @default("[]")
+  pageSize                  String               @default("A4")
   editionNumber             Int                  @default(1)
+  generationMode            String               @default("ALL_ACTIVE")
   status                    PdfEditionStatus     @default(DRAFT)
   coverTitleAr              String?
   coverSubtitleAr           String?
   introTextAr               String?
   editorialTextAr           String?
   closingTextAr             String?
-  includeAlphabeticalIndex  Boolean              @default(true)
-  includeBusinessLogos      Boolean              @default(false)
   includeQrCodes            Boolean              @default(true)
+  includeBusinessLogos      Boolean              @default(true)
+  includeAlphabeticalIndex  Boolean              @default(true)
   includeFeaturedBusinesses Boolean              @default(true)
   includeWebsiteProfile     Boolean              @default(true)
   includeDeveloperProfile   Boolean              @default(false)
   showEditionMetadata       Boolean              @default(true)
-  generationMode            String               @default("FULL_CITY")
-  pageSize                  String               @default("A4")
-  marginsJson               Json?
-  themeJson                 Json?
-  layoutJson                Json?
   publishedAt               DateTime?
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
-  cityIdsJson               String?
-  editionAds                PdfEditionAd[]
-  editionCategories         PdfEditionCategory[]
   city                      City                 @relation(fields: [cityId], references: [id])
   generationJobs            PdfGenerationJob[]
+  editionAds                PdfEditionAd[]
+  editionCategories         PdfEditionCategory[]
 
-  @@index([cityId, status])
-  @@index([status, publishedAt])
   @@map("pdf_editions")
 }
 
-/// Async job that generates a PDF edition
 model PdfGenerationJob {
-  id            String       @id @default(cuid())
-  editionId     String
-  status        PdfJobStatus @default(QUEUED)
-  outputFileUrl String?
-  pagesCount    Int?
-  errorMessage  String?
-  createdAt     DateTime     @default(now())
-  triggeredById String?
-  updatedAt     DateTime?    @updatedAt
-  fileSizeBytes Int?
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  edition       PdfEdition   @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id          String        @id @default(cuid())
+  editionId   String
+  status      PdfJobStatus  @default(QUEUED)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  fileUrl     String?
+  errorMsg    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  edition     PdfEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
-  @@index([editionId])
   @@map("pdf_generation_jobs")
 }
 
-/// Ad that appears inside a PDF edition
 model PdfAd {
-  id                                                        String             @id @default(cuid())
-  titleAr                                                   String
-  imageUrl                                                  String
-  linkUrl                                                   String?
-  categoryId                                                String?
-  placementType                                             PdfAdPlacementType
-  priority                                                  Int                @default(0)
-  startsAt                                                  DateTime?
-  endsAt                                                    DateTime?
-  isActive                                                  Boolean            @default(true)
-  createdAt                                                 DateTime           @default(now())
-  updatedAt                                                 DateTime           @updatedAt
-  position_after_category_id                                String?
-  titleEn                                                   String?
-  positionAfterCategoryId                                   String?
-  category                                                  Category?          @relation(fields: [categoryId], references: [id])
-  categories_pdf_ads_position_after_category_idTocategories Category?          @relation("pdf_ads_position_after_category_idTocategories", fields: [position_after_category_id], references: [id])
-  editionAds                                                PdfEditionAd[]
+  id                      String              @id @default(cuid())
+  titleAr                 String
+  imageUrl                String
+  linkUrl                 String?
+  placementType           PdfAdPlacementType  @default(FULL_PAGE)
+  priority                Int                 @default(0)
+  isActive                Boolean             @default(true)
+  positionAfterCategoryId String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  category                Category?           @relation(fields: [positionAfterCategoryId], references: [id])
+  position_after_category Category?           @relation("pdf_ads_position_after_category_idTocategories", fields: [positionAfterCategoryId], references: [id])
+  editionAds              PdfEditionAd[]
 
-  @@index([categoryId, isActive])
-  @@index([isActive, placementType])
-  @@index([position_after_category_id])
   @@map("pdf_ads")
 }
 
-/// M-N join: which ads appear in which editions
 model PdfEditionAd {
-  id        String     @id @default(cuid())
-  editionId String
-  adId      String
-  createdAt DateTime   @default(now())
-  ad        PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  edition   PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id          String     @id @default(cuid())
+  editionId   String
+  adId        String
+  displayOrder Int       @default(0)
+  edition     PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  ad          PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade)
 
   @@unique([editionId, adId])
   @@map("pdf_edition_ads")
 }
 
-/// Which categories are included in a specific edition, with settings
 model PdfEditionCategory {
-  id              String             @id @default(cuid())
-  editionId       String
-  categoryId      String
-  displayOrder    Int                @default(0)
-  listingTemplate PdfListingTemplate @default(STANDARD)
-  sortMode        PdfSortMode        @default(ALPHABETICAL)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  maxListings     Int?
-  category        Category           @relation(fields: [categoryId], references: [id])
-  edition         PdfEdition         @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id           String          @id @default(cuid())
+  editionId    String
+  categoryId   String
+  displayOrder Int             @default(0)
+  template     PdfListingTemplate @default(STANDARD)
+  sortMode     PdfSortMode     @default(ALPHABETICAL)
+  edition      PdfEdition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  category     Category        @relation(fields: [categoryId], references: [id])
 
   @@unique([editionId, categoryId])
-  @@index([editionId, displayOrder])
   @@map("pdf_edition_categories")
 }
 
-model platform_settings {
-  id          String   @id
-  key         String   @unique
-  value       String
-  description String?
-  updatedAt   DateTime
+/// Singleton: one record holds the website info block shown in PDF editions.
+/// Use upsert (findFirst + update/create) — never create more than one row.
+model WebsiteProfileBlock {
+  id           String   @id @default(cuid())
+  titleAr      String
+  shortTextAr  String?
+  bodyTextAr   String?
+  websiteUrl   String?
+  supportEmail String?
+  supportPhone String?
+  ctaTextAr    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("website_profile_blocks")
+}
+
+/// Singleton: one record holds the developer bio block shown in PDF editions.
+/// Use upsert (findFirst + update/create) — never create more than one row.
+model DeveloperProfileBlock {
+  id           String   @id @default(cuid())
+  fullName     String
+  roleTitleAr  String?
+  shortBioAr   String?
+  portfolioUrl String?
+  email        String?
+  phone        String?
+  ctaTextAr    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("developer_profile_blocks")
 }
 
 enum Role {
-  GUEST
-  BUSINESS_OWNER
-  ADMIN
   SUPER_ADMIN
+  ADMIN
+  BUSINESS_OWNER
+  USER
 }
 
 enum BusinessStatus {
   DRAFT
+  PENDING
   ACTIVE
   SUSPENDED
-  PENDING
   REJECTED
 }
 
 enum MediaType {
   IMAGE
   VIDEO
-}
-
-enum MediaStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum SuggestionStatus {
-  PENDING
-  APPROVED
-  REJECTED
 }
 
 enum PhoneLabel {
@@ -560,13 +534,6 @@ enum SocialPlatform {
   WEBSITE
 }
 
-enum CommentStatus {
-  VISIBLE
-  HIDDEN_BY_ADMIN
-  DELETED_BY_USER
-  PENDING_REVIEW
-}
-
 enum ContactMessageStatus {
   NEW
   READ
@@ -574,19 +541,40 @@ enum ContactMessageStatus {
   SPAM
 }
 
+enum CommentStatus {
+  VISIBLE
+  PENDING_REVIEW
+  HIDDEN_BY_ADMIN
+  DELETED_BY_USER
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AuditAction {
   USER_CREATED
-  USER_ROLE_CHANGED
+  USER_UPDATED
   USER_DELETED
+  USER_SUSPENDED
+  USER_ROLE_CHANGED
+  USER_PASSWORD_CHANGED
+  USER_EMAIL_CHANGED
+  USER_LOGIN
+  USER_LOGOUT
+  USER_VERIFIED
   LISTING_CREATED
   LISTING_UPDATED
   LISTING_SUBMITTED
+  LISTING_APPROVED
+  LISTING_REJECTED
   LISTING_SUSPENDED
   LISTING_RESTORED
   LISTING_DELETED
   MEDIA_UPLOADED
-  MEDIA_APPROVED
-  MEDIA_REJECTED
+  MEDIA_DELETED
   CATEGORY_CREATED
   CATEGORY_UPDATED
   CATEGORY_DELETED
