@@ -1,10 +1,6 @@
 /**
  * Public-facing DB queries for PDF pages.
  * These run in Server Components — no auth required.
- *
- * NOTE: The Prisma model for the legacy PDF is `PdfLegacyFile` (@@map "pdf_legacy_files").
- * We expose it through a normalised `LegacyPdfInfo` shape so every consumer
- * stays the same if the underlying model ever changes.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -16,9 +12,10 @@ export interface LegacyPdfInfo {
   /** Resolved URL: fileUrl if FILE, externalUrl if EXTERNAL_URL */
   fileUrl: string | null;
   titleAr: string;
+  buttonLabelAr: string;
+  buttonLabelEn: string | null;
   descriptionAr: string | null;
-  pageCount: number | null;
-  businessCount: number | null;
+  openMode: string;
   publishedAt: Date | null;
 }
 
@@ -26,7 +23,7 @@ export interface LegacyPdfInfo {
 
 /** Returns the active Legacy PDF record, normalised to LegacyPdfInfo. */
 export async function getLegacyPdfConfig(): Promise<LegacyPdfInfo | null> {
-  const row = await prisma.pdfLegacyFile.findFirst({
+  const row = await prisma.legacyPdfConfig.findFirst({
     where: { isPublished: true },
     orderBy: { updatedAt: "desc" },
   });
@@ -39,17 +36,16 @@ export async function getLegacyPdfConfig(): Promise<LegacyPdfInfo | null> {
       row.sourceType === "FILE"
         ? row.fileUrl
         : row.externalUrl ?? row.fileUrl,
-    titleAr: row.buttonLabelAr ?? row.titleAr,
+    titleAr: row.titleAr,
+    buttonLabelAr: row.buttonLabelAr,
+    buttonLabelEn: row.buttonLabelEn ?? null,
     descriptionAr: row.descriptionAr ?? null,
-    // PdfLegacyFile doesn't store pageCount/businessCount — kept null
-    // until we add those fields in a future migration.
-    pageCount: null,
-    businessCount: null,
+    openMode: row.openMode,
     publishedAt: row.publishedAt ?? null,
   };
 }
 
-/** Returns the latest PUBLISHED edition with its generation job stats. */
+/** Returns the latest PUBLISHED edition with its last succeeded generation job. */
 export async function getLatestPublishedEdition() {
   return prisma.pdfEdition.findFirst({
     where: { status: "PUBLISHED" },
@@ -57,14 +53,14 @@ export async function getLatestPublishedEdition() {
     include: {
       city: { select: { nameAr: true } },
       generationJobs: {
-        where: { status: "SUCCEEDED", isPreview: false },
+        where: { status: "SUCCEEDED" },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: {
           pagesCount: true,
-          businessesCount: true,
-          outputFileSizeBytes: true,
-          generatedAt: true,
+          fileSizeBytes: true,
+          outputFileUrl: true,
+          createdAt: true,
         },
       },
     },
@@ -79,14 +75,14 @@ export async function getPublishedEditions() {
     include: {
       city: { select: { nameAr: true } },
       generationJobs: {
-        where: { status: "SUCCEEDED", isPreview: false },
+        where: { status: "SUCCEEDED" },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: {
           pagesCount: true,
-          businessesCount: true,
-          outputFileSizeBytes: true,
-          generatedAt: true,
+          fileSizeBytes: true,
+          outputFileUrl: true,
+          createdAt: true,
         },
       },
     },
@@ -100,7 +96,7 @@ export async function getPublishedEditionById(id: string) {
     include: {
       city: { select: { nameAr: true } },
       generationJobs: {
-        where: { status: "SUCCEEDED", isPreview: false },
+        where: { status: "SUCCEEDED" },
         orderBy: { createdAt: "desc" },
         take: 1,
       },
