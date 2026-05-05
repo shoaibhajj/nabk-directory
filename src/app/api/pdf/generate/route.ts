@@ -104,7 +104,8 @@ export async function POST(req: NextRequest) {
       ? `preview-${input.editionSlug}.pdf`
       : `${input.editionSlug}.pdf`;
 
-    return new NextResponse(result.buffer, {
+    // Cast Buffer → Uint8Array so TypeScript accepts it as BodyInit
+    return new NextResponse(new Uint8Array(result.buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
