@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 const businessCardInclude = {
   category: true,
   subcategory: true,
-  phones: { orderBy: { createdAt: "asc" } },
+  phones: { orderBy: { displayOrder: "asc" } },
   workingHours: true,
 } satisfies Prisma.BusinessProfileInclude;
 
@@ -48,7 +48,7 @@ const businessDetailInclude = {
   subcategory: true,
   city: true,
   owner: { select: { id: true, name: true } },
-  phones: { orderBy: { createdAt: "asc" } },
+  phones: { orderBy: { displayOrder: "asc" } },
   workingHours: { orderBy: { dayOfWeek: "asc" } },
   socialLinks: true,
   media: {
@@ -68,11 +68,6 @@ export async function getBusinessById(id: string): Promise<BusinessDetail | null
   });
 }
 
-/**
- * Resolve a business by its public slug, with a fallback to its cuid id so
- * old `/businesses/<id>` permalinks keep working. Returns `matchedBy` so the
- * caller can 308-redirect id matches to the canonical slug URL.
- */
 export async function getBusinessBySlugOrId(
   slugOrId: string,
 ): Promise<{ business: BusinessDetail; matchedBy: "slug" | "id" } | null> {
