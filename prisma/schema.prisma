@@ -137,28 +137,28 @@ enum AuditAction {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ENUMS — PDF system (new)
+// ENUMS — PDF system
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// How the legacy PDF is served to the public user
 enum PdfLegacyOpenMode {
-  PREVIEW           // open in embedded preview first
-  DIRECT_DOWNLOAD   // trigger browser download immediately
-  OPEN_IN_NEW_TAB   // open URL/file in a new browser tab
+  PREVIEW
+  DIRECT_DOWNLOAD
+  OPEN_IN_NEW_TAB
 }
 
 /// Where the legacy PDF file comes from
 enum PdfLegacySourceType {
-  FILE          // uploaded to our storage
-  EXTERNAL_URL  // public URL managed externally
+  FILE
+  EXTERNAL_URL
 }
 
 /// Lifecycle states of a PDF edition
 enum PdfEditionStatus {
-  DRAFT      // being edited, not visible to anyone outside admin
-  REVIEW     // submitted for final review before publish
-  PUBLISHED  // live — only one edition can be PUBLISHED at a time per city
-  ARCHIVED   // replaced by a newer edition; kept for history
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
 }
 
 /// Supported ad placement slots inside the PDF
@@ -175,18 +175,18 @@ enum PdfAdPlacementType {
 
 /// Which listing page template to use for a given category section
 enum PdfListingTemplate {
-  STANDARD         // single-column, generous spacing
-  DENSE            // two-column, compact
-  AD_HEAVY         // single-column with side-margin ad slot
-  MIXED            // alternating blocks (featured + standard rows)
+  STANDARD
+  DENSE
+  AD_HEAVY
+  MIXED
 }
 
 /// How businesses are ordered within a category section
 enum PdfSortMode {
-  ALPHABETICAL       // nameAr A → Z
-  FEATURED_FIRST     // featured flag first, then alphabetical
-  NEWEST_FIRST       // publishedAt desc
-  CUSTOM             // admin-defined displayOrder on each listing (future)
+  ALPHABETICAL
+  FEATURED_FIRST
+  NEWEST_FIRST
+  CUSTOM
 }
 
 /// Async generation job status
@@ -198,7 +198,7 @@ enum PdfJobStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXISTING MODELS (unchanged)
+// MODELS
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
@@ -343,9 +343,9 @@ model Category {
   listings     BusinessProfile[]
   subListings  BusinessProfile[] @relation("Subcategory")
 
-  pdfEditionCategories  PdfEditionCategory[]
-  pdfAds                PdfAd[]
-  pdfAdsPositionAfter   PdfAd[]              @relation("PdfAdPositionAfter")
+  pdfEditionCategories PdfEditionCategory[]
+  pdfAds               PdfAd[]
+  pdfAdsPositionAfter  PdfAd[]              @relation("PdfAdPositionAfter")
 
   @@map("categories")
 }
@@ -392,10 +392,10 @@ model BusinessProfile {
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
 
-  owner        User      @relation(fields: [ownerId], references: [id])
-  city         City      @relation(fields: [cityId], references: [id])
-  category     Category  @relation(fields: [categoryId], references: [id])
-  subcategory  Category? @relation("Subcategory", fields: [subcategoryId], references: [id])
+  owner        User               @relation(fields: [ownerId], references: [id])
+  city         City               @relation(fields: [cityId], references: [id])
+  category     Category           @relation(fields: [categoryId], references: [id])
+  subcategory  Category?          @relation("Subcategory", fields: [subcategoryId], references: [id])
   phones       BusinessPhone[]
   socialLinks  BusinessSocialLink[]
   workingHours WorkingHours[]
@@ -411,54 +411,58 @@ model BusinessProfile {
   @@map("business_profiles")
 }
 
+// ── جدول phone_numbers الموجود في DB ──
 model BusinessPhone {
-  id        String     @id @default(cuid())
-  profileId String
-  number    String
-  label     PhoneLabel @default(MOBILE)
-  isPrimary Boolean    @default(false)
-  createdAt DateTime   @default(now())
-  profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  businessProfileId String
+  number            String
+  label             PhoneLabel      @default(MOBILE)
+  displayOrder      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  profile           BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
 
-  @@map("business_phones")
+  @@map("phone_numbers")
 }
 
+// ── جدول social_links الموجود في DB ──
 model BusinessSocialLink {
-  id        String         @id @default(cuid())
-  profileId String
-  platform  SocialPlatform
-  url       String
-  createdAt DateTime       @default(now())
-  profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  businessProfileId String
+  platform          SocialPlatform
+  url               String
+  createdAt         DateTime        @default(now())
+  profile           BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
 
-  @@map("business_social_links")
+  @@map("social_links")
 }
 
+// ── جدول working_hours الموجود في DB ──
 model WorkingHours {
-  id        String   @id @default(cuid())
-  profileId String
-  dayOfWeek Int
-  openTime  String?
-  closeTime String?
-  isClosed  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  businessProfileId String
+  dayOfWeek         Int
+  openTime          String?
+  closeTime         String?
+  isOpen            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  profile           BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
 
-  @@unique([profileId, dayOfWeek])
+  @@unique([businessProfileId, dayOfWeek])
   @@map("working_hours")
 }
 
+// ── جداول جديدة تُنشأ بـ db push ──
 model BusinessMedia {
-  id           String      @id @default(cuid())
+  id           String          @id @default(cuid())
   profileId    String
-  type         MediaType   @default(IMAGE)
+  type         MediaType       @default(IMAGE)
   url          String
   caption      String?
-  displayOrder Int         @default(0)
-  status       MediaStatus @default(PENDING)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  displayOrder Int             @default(0)
+  status       MediaStatus     @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   profile      BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
@@ -466,10 +470,10 @@ model BusinessMedia {
 }
 
 model BusinessTag {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   profileId String
   tag       String
-  createdAt DateTime @default(now())
+  createdAt DateTime        @default(now())
   profile   BusinessProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, tag])
@@ -541,6 +545,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// جدول media_files المستقل الموجود في DB (غير مرتبط بـ BusinessProfile)
 model MediaFile {
   id           String   @id @default(cuid())
   url          String
