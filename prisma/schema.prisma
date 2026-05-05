@@ -710,9 +710,3 @@ enum PdfJobStatus {
   SUCCEEDED
   FAILED
 }
-
-enum MediaStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
