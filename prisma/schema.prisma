@@ -487,7 +487,7 @@ model PdfEditionCategory {
   listingTemplate PdfListingTemplate @default(STANDARD)
   sortMode        PdfSortMode        @default(ALPHABETICAL)
   createdAt       DateTime           @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime           @updatedAt
   maxListings     Int?
   category        Category           @relation(fields: [categoryId], references: [id])
   edition         PdfEdition         @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -503,6 +503,40 @@ model platform_settings {
   value       String
   description String?
   updatedAt   DateTime
+}
+
+/// Singleton: one record holds the website info block shown in PDF editions.
+/// Use upsert (findFirst + update/create) — never create more than one row.
+model WebsiteProfileBlock {
+  id           String   @id @default(cuid())
+  titleAr      String
+  shortTextAr  String?
+  bodyTextAr   String?
+  websiteUrl   String?
+  supportEmail String?
+  supportPhone String?
+  ctaTextAr    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("website_profile_blocks")
+}
+
+/// Singleton: one record holds the developer bio block shown in PDF editions.
+/// Use upsert (findFirst + update/create) — never create more than one row.
+model DeveloperProfileBlock {
+  id           String   @id @default(cuid())
+  fullName     String
+  roleTitleAr  String?
+  shortBioAr   String?
+  portfolioUrl String?
+  email        String?
+  phone        String?
+  ctaTextAr    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("developer_profile_blocks")
 }
 
 enum Role {
@@ -523,6 +557,12 @@ enum BusinessStatus {
 enum MediaType {
   IMAGE
   VIDEO
+}
+
+enum MediaStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum PhoneLabel {
@@ -621,20 +661,17 @@ enum AuditAction {
   PDF_AD_DEACTIVATED
 }
 
-/// How the legacy PDF is served to the public user
 enum PdfLegacyOpenMode {
   PREVIEW
   DIRECT_DOWNLOAD
   OPEN_IN_NEW_TAB
 }
 
-/// Where the legacy PDF file comes from
 enum PdfLegacySourceType {
   FILE
   EXTERNAL_URL
 }
 
-/// Lifecycle states of a PDF edition
 enum PdfEditionStatus {
   DRAFT
   REVIEW
@@ -642,7 +679,6 @@ enum PdfEditionStatus {
   ARCHIVED
 }
 
-/// Supported ad placement slots inside the PDF
 enum PdfAdPlacementType {
   FULL_PAGE
   HALF_PAGE_TOP
@@ -654,7 +690,6 @@ enum PdfAdPlacementType {
   CATEGORY_SPONSOR
 }
 
-/// Which listing page template to use for a given category section
 enum PdfListingTemplate {
   STANDARD
   DENSE
@@ -662,7 +697,6 @@ enum PdfListingTemplate {
   MIXED
 }
 
-/// How businesses are ordered within a category section
 enum PdfSortMode {
   ALPHABETICAL
   FEATURED_FIRST
@@ -670,7 +704,6 @@ enum PdfSortMode {
   CUSTOM
 }
 
-/// Async generation job status
 enum PdfJobStatus {
   QUEUED
   PROCESSING
