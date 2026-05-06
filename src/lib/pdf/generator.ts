@@ -11,6 +11,8 @@
  *   CATEGORY_SPONSOR     → sponsor badge in the section header
  * ✔ Task-4: positionAfterCategoryId on PdfAdData – ad appears after
  *   the specified category section (falls back to round-robin if null)
+ * ✔ Images: all imageUrls are fetched + resized via Sharp before being
+ *   embedded — no cropping, lanczos3 quality, mozjpeg compression.
  */
 
 import React from "react";
@@ -26,6 +28,7 @@ import {
 } from "@react-pdf/renderer";
 import QRCode from "qrcode";
 import { registerFonts } from "./fonts";
+import { fetchAndResizeImage } from "./image-utils";
 import type {
   PdfDocumentInput,
   PdfCategorySection,
@@ -38,6 +41,12 @@ import type {
   PdfDeveloperProfile,
   GenerationResult,
 } from "./types";
+
+// ── Page dimensions (pt) ──────────────────────────────────────────────────────
+// A4 = 595 × 842 pt  |  LETTER = 612 × 792 pt
+// Inner width after default margins (left 40 + right 40) ≈ 515 pt
+const PAGE_INNER_W = 515; // used to derive ad image target widths
+const SIDEBAR_W    = 130; // must match adSidebarCol.width below
 
 // ── Category icon map ─────────────────────────────────────────────────────────
 
@@ -81,23 +90,18 @@ async function buildQrDataUrl(url: string): Promise<string> {
 
 function getAdHref(ad: PdfAdData): string | null {
   if (ad.linkUrl?.trim()) return ad.linkUrl.trim();
-
   const phone = (ad as PdfAdData & { phone?: string | null }).phone;
-  if (phone?.trim()) {
-    return `tel:${phone.trim()}`;
-  }
-
+  if (phone?.trim()) return `tel:${phone.trim()}`;
   return null;
 }
 
 function wrapWithLink(
   href: string | null,
   child: React.ReactNode,
-  style?: any
+  style?: object
 ) {
   if (!href) return child;
-
-  return React.createElement(Link, { src: href, style: style }, child);
+  return React.createElement(Link, { src: href, style }, child);
 }
 
 // ── Style factory ────────────────────────────────────────────────────────────
@@ -167,7 +171,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       justifyContent: "center",
       padding: 40,
     },
-    dividerIcon: { fontSize: 64, marginBottom: 24, textAlign: "center" },
+    dividerIcon:  { fontSize: 64, marginBottom: 24, textAlign: "center" },
     dividerTitle: {
       fontFamily: "Cairo",
       fontSize: 42,
@@ -286,10 +290,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       justifyContent: "space-between",
       alignItems: "flex-start",
     },
-    qrImage: {
-      width: 60,
-      height: 60,
-    },
+    qrImage:   { width: 60, height: 60 },
     qrHint: {
       fontFamily: "Cairo",
       fontSize: 8,
@@ -299,45 +300,48 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       lineHeight: 1.4,
     },
-    businessInfo: {
-      flex: 1,
-      paddingRight: 8,
-    },
+    businessInfo: { flex: 1, paddingRight: 8 },
 
-    // ── Ad blocks ────────────────────────────────────────────────────────────────
+    // ── Ad blocks ─────────────────────────────────────────────────────────
+    //
+    // NOTE: all images are now pre-processed by fetchAndResizeImage() and
+    // passed as data-URIs. The styles below just control *layout* dimensions;
+    // Sharp handles aspect-ratio preservation so we never crop anything.
 
+    // FULL_PAGE — image fills the whole page (no margins page)
     adFullPage: {
       width: "100%",
       height: "100%",
-      objectFit: "contain",
+      objectFit: "contain",   // safety net; image is already the right size
     },
 
-    // HALF_PAGE: نسبة 16:9 تقريباً — تعمل مع أي صورة أفقية أو عمودية
+    // HALF_PAGE — occupies roughly half the page height
+    // The image has been resized to PAGE_INNER_W × (PAGE_INNER_W/1.78) by Sharp.
     adHalfBlock: {
       width: "100%",
-      aspectRatio: 1.78, // 16/9 — يضبط الارتفاع تلقائياً بناءً على العرض
-      objectFit: "cover",
+      aspectRatio: 1.78,     // matches the 16:9 target we pass to fetchAndResizeImage
+      objectFit: "contain",  // no cropping in the renderer either
     },
 
-    // SIDEBAR COL: العمود كله يمتد بالكامل عمودياً
+    // SIDEBAR column wrapper
     adSidebarCol: {
-      width: 130,
-      flexShrink: 0, // لا يتقلص أبداً مهما ضاق المكان
+      width: SIDEBAR_W,
+      flexShrink: 0,
       borderLeftWidth: 1,
       borderLeftColor: theme.borderColor,
       paddingLeft: 4,
       display: "flex",
       flexDirection: "column",
-      alignItems: "stretch", // الصورة تأخذ كامل العرض
-      alignSelf: "stretch", // العمود يمتد بطول الصف كاملاً
+      alignItems: "stretch",
+      alignSelf: "stretch",
     },
 
-    // SIDEBAR IMG: تملأ العمود كاملاً بدون ارتفاع ثابت
+    // SIDEBAR image — fills column width; height driven by image content
     adSidebarImg: {
       width: "100%",
-      flexGrow: 1, // تأخذ كل المساحة المتبقية في العمود
-      objectFit: "cover",
-      minHeight: 120, // حد أدنى لتجنب الانهيار إذا كان المحتوى قصيراً
+      flexGrow: 1,
+      objectFit: "contain",  // never crop; Sharp already letterboxed
+      minHeight: 120,
     },
 
     adSidebarText: {
@@ -347,11 +351,10 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       textAlign: "center",
       direction: "rtl" as never,
       marginTop: 4,
-      flexShrink: 0, // النص لا يتقلص
+      flexShrink: 0,
     },
 
-    // HEADER/FOOTER BANNER: ارتفاع ثابت مقصود لأنه banner أفقي رفيع
-
+    // HEADER / FOOTER BANNER — fixed-height horizontal strip
     adBannerBlock: {
       width: "100%",
       height: 80,
@@ -360,13 +363,11 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       overflow: "hidden",
       marginBottom: 6,
     },
-
     adBannerImg: {
       width: "100%",
       height: 80,
-      objectFit: "fill", // ← يمط الصورة لتملأ المساحة كاملاً
+      objectFit: "contain",  // Sharp already stretched to banner ratio; contain is safe
     },
-
     adBannerText: {
       fontFamily: "Cairo",
       fontSize: 9,
@@ -375,6 +376,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       textAlign: "center",
     },
 
+    // SPONSOR BADGE
     adSponsorBadge: {
       backgroundColor: theme.accentColor,
       borderRadius: 4,
@@ -383,7 +385,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginRight: 8,
       flexShrink: 0,
     },
-
     adSponsorText: {
       fontFamily: "Cairo",
       fontSize: 8,
@@ -391,7 +392,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "rtl" as never,
     },
 
-    // TEXT FALLBACK CARD: للإعلانات التي ليس لها صورة
+    // TEXT FALLBACK — when an ad has no image
     adTextCard: {
       borderWidth: 2,
       borderColor: theme.accentColor,
@@ -403,9 +404,8 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      flexGrow: 1, // يملأ المساحة المتاحة
+      flexGrow: 1,
     },
-
     adTextTitle: {
       fontFamily: "Cairo",
       fontSize: 16,
@@ -415,7 +415,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "rtl" as never,
       marginBottom: 6,
     },
-
     adTextBody: {
       fontFamily: "Cairo",
       fontSize: 11,
@@ -423,7 +422,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       textAlign: "center",
       direction: "rtl" as never,
     },
-
     adTextPhone: {
       fontFamily: "Cairo",
       fontSize: 12,
@@ -432,6 +430,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       direction: "ltr" as never,
       marginTop: 8,
     },
+
     // ── Profile blocks ────────────────────────────────────────────────────
     profileBlock: {
       borderWidth: 1,
@@ -467,7 +466,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
     },
 
-    // ── Index (page-number based) ─────────────────────────────────────────
+    // ── Index ─────────────────────────────────────────────────────────────
     indexTitle: {
       fontFamily: "Cairo",
       fontSize: 22,
@@ -596,22 +595,91 @@ function isInlinePlacement(placement: string): boolean {
   ].includes(placement);
 }
 
+// ── Resolved image cache (populated once in buildDocument) ───────────────────
+//
+// Key   = original imageUrl string
+// Value = base64 data-URI returned by fetchAndResizeImage, or null on failure
+
+type ImageCache = Map<string, string | null>;
+
+// Target pixel dimensions per placement type.
+// We pass these to Sharp so the right amount of data is in each JPEG/PNG.
+const AD_IMAGE_SIZES: Record<string, { w: number; h: number }> = {
+  FULL_PAGE:       { w: 595,            h: 842 },   // A4 in pt → px approx
+  HALF_PAGE_TOP:   { w: PAGE_INNER_W,   h: Math.round(PAGE_INNER_W / 1.78) },
+  HALF_PAGE_BOTTOM:{ w: PAGE_INNER_W,   h: Math.round(PAGE_INNER_W / 1.78) },
+  HEADER_BANNER:   { w: PAGE_INNER_W,   h: 160 },   // 80 pt × 2 for retina feel
+  FOOTER_BANNER:   { w: PAGE_INNER_W,   h: 160 },
+  SIDEBAR_LEFT:    { w: SIDEBAR_W * 2,  h: 400 },   // tall narrow
+  SIDEBAR_RIGHT:   { w: SIDEBAR_W * 2,  h: 400 },
+  CATEGORY_SPONSOR:{ w: 120,            h: 40 },
+};
+
+/** Pre-fetch and resize every ad image referenced in the document. */
+async function buildImageCache(
+  ads: PdfAdData[]
+): Promise<ImageCache> {
+  const cache: ImageCache = new Map();
+
+  await Promise.all(
+    ads
+      .filter((ad) => !!ad.imageUrl)
+      .map(async (ad) => {
+        const key = ad.imageUrl;
+        if (cache.has(key)) return; // deduplicate
+
+        const dims =
+          AD_IMAGE_SIZES[ad.effectivePlacement] ??
+          { w: PAGE_INNER_W, h: 300 };
+
+        const dataUri = await fetchAndResizeImage(
+          ad.imageUrl,
+          dims.w,
+          dims.h,
+          {
+            // White background for all ad images (covers transparent PNGs)
+            background: { r: 255, g: 255, b: 255, alpha: 1 },
+            quality: 82,
+          }
+        );
+
+        cache.set(key, dataUri);
+
+        if (!dataUri) {
+          console.warn(
+            `[generator] Could not load image for ad "${ad.titleAr}" (${ad.imageUrl})`
+          );
+        }
+      })
+  );
+
+  return cache;
+}
+
+/** Returns the pre-processed data-URI for an ad image, or null. */
+function resolveAdImage(
+  ad: PdfAdData,
+  cache: ImageCache
+): string | null {
+  if (!ad.imageUrl) return null;
+  return cache.get(ad.imageUrl) ?? null;
+}
+
 // ── Inline ad elements (rendered inside a section page) ───────────────────
 
 function AdBannerElement({
   ad,
+  dataUri,
   styles,
 }: {
   ad: PdfAdData;
+  dataUri: string | null;
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
 
-  const content = ad.imageUrl
-    ? React.createElement(Image, {
-        src: ad.imageUrl,
-        style: styles.adBannerImg,
-      })
+  const content = dataUri
+    ? React.createElement(Image, { src: dataUri, style: styles.adBannerImg })
     : React.createElement(
         View,
         { style: styles.adBannerBlock },
@@ -623,18 +691,17 @@ function AdBannerElement({
 
 function AdSidebarElement({
   ad,
+  dataUri,
   styles,
 }: {
   ad: PdfAdData;
+  dataUri: string | null;
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
 
-  const content = ad.imageUrl
-    ? React.createElement(Image, {
-        src: ad.imageUrl,
-        style: styles.adSidebarImg,
-      })
+  const content = dataUri
+    ? React.createElement(Image, { src: dataUri, style: styles.adSidebarImg })
     : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr);
 
   return React.createElement(
@@ -666,10 +733,12 @@ function AdSponsorBadge({
 
 function StandaloneAdPage({
   ad,
+  dataUri,
   styles,
   pageSize,
 }: {
   ad: PdfAdData;
+  dataUri: string | null;
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
 }) {
@@ -677,12 +746,11 @@ function StandaloneAdPage({
   const href = getAdHref(ad);
 
   if (placement === "FULL_PAGE") {
-    if (ad.imageUrl) {
+    if (dataUri) {
       const image = React.createElement(Image, {
-        src: ad.imageUrl,
+        src: dataUri,
         style: styles.adFullPage,
       });
-
       return React.createElement(
         Page,
         { size: pageSize, style: styles.adStandalonePage },
@@ -690,17 +758,13 @@ function StandaloneAdPage({
       );
     }
 
+    // No image fallback
     const textCard = React.createElement(
       View,
       { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
       React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-      React.createElement(
-        Text,
-        { style: styles.adTextBody },
-        ad.titleEn ?? ad.titleAr
-      )
+      React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
     );
-
     return React.createElement(
       Page,
       { size: pageSize, style: styles.coverPage },
@@ -708,25 +772,19 @@ function StandaloneAdPage({
     );
   }
 
+  // HALF_PAGE_TOP / HALF_PAGE_BOTTOM
   const isTop = placement === "HALF_PAGE_TOP";
 
-  const imageNode = ad.imageUrl
-    ? React.createElement(Image, {
-        src: ad.imageUrl,
-        style: styles.adHalfBlock,
-      })
+  const imageNode = dataUri
+    ? React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
     : React.createElement(
         View,
         { style: [styles.adTextCard, { height: 250 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(
-          Text,
-          { style: styles.adTextBody },
-          ad.titleEn ?? ad.titleAr
-        )
+        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
       );
 
-  const halfBlock = ad.imageUrl
+  const halfBlock = dataUri
     ? wrapWithLink(href, imageNode, { width: "100%" })
     : wrapWithLink(href, imageNode);
 
@@ -779,26 +837,14 @@ function BusinessCardStandard({
             hasQr
               ? React.createElement(
                   Link,
-                  {
-                    src: business.publicUrl,
-                    style: {
-                      display: "flex",
-                      alignItems: "center",
-                    },
-                  },
-                  React.createElement(Image, {
-                    src: qrDataUrl!,
-                    style: styles.qrImage,
-                  })
+                  { src: business.publicUrl, style: { display: "flex", alignItems: "center" } },
+                  React.createElement(Image, { src: qrDataUrl!, style: styles.qrImage })
                 )
               : null,
             hasQr
               ? React.createElement(
                   Link,
-                  {
-                    src: business.publicUrl,
-                    style: { textDecoration: "none" },
-                  },
+                  { src: business.publicUrl, style: { textDecoration: "none" } },
                   React.createElement(
                     Text,
                     { style: styles.qrHint },
@@ -811,17 +857,9 @@ function BusinessCardStandard({
       React.createElement(
         View,
         { style: showLeftSide ? styles.businessInfo : undefined },
-        React.createElement(
-          Text,
-          { style: styles.businessName },
-          business.nameAr
-        ),
+        React.createElement(Text, { style: styles.businessName }, business.nameAr),
         business.addressAr
-          ? React.createElement(
-              Text,
-              { style: styles.businessAddress },
-              business.addressAr
-            )
+          ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
           : null,
         business.descriptionAr
           ? React.createElement(
@@ -841,11 +879,7 @@ function BusinessCardStandard({
                   React.createElement(
                     View,
                     { key: p.number, style: styles.phoneChip },
-                    React.createElement(
-                      Text,
-                      { style: styles.phoneText },
-                      p.number
-                    )
+                    React.createElement(Text, { style: styles.phoneText }, p.number)
                   )
                 )
             )
@@ -867,20 +901,12 @@ function BusinessCardDense({
     { style: styles.denseCard },
     React.createElement(Text, { style: styles.businessName }, business.nameAr),
     business.addressAr
-      ? React.createElement(
-          Text,
-          { style: styles.businessAddress },
-          business.addressAr
-        )
+      ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
       : null,
     ...business.phoneNumbers
       .slice(0, 2)
       .map((p) =>
-        React.createElement(
-          Text,
-          { key: p.number, style: styles.phoneText },
-          p.number
-        )
+        React.createElement(Text, { key: p.number, style: styles.phoneText }, p.number)
       )
   );
 }
@@ -900,18 +926,10 @@ function CoverPage({
     input.isPreview
       ? React.createElement(Text, { style: styles.watermark }, "مسودة")
       : null,
-    React.createElement(
-      Text,
-      { style: styles.coverTitle },
-      input.coverTitleAr ?? input.titleAr
-    ),
+    React.createElement(Text, { style: styles.coverTitle }, input.coverTitleAr ?? input.titleAr),
     React.createElement(View, { style: styles.coverDivider }),
     input.coverSubtitleAr
-      ? React.createElement(
-          Text,
-          { style: styles.coverSubtitle },
-          input.coverSubtitleAr
-        )
+      ? React.createElement(Text, { style: styles.coverSubtitle }, input.coverSubtitleAr)
       : null,
     input.showEditionMetadata
       ? React.createElement(
@@ -970,17 +988,12 @@ function buildPageMap(
   return sections.map((sec) => {
     pageCounter++;
     const contentPage = ++pageCounter;
-
     return {
       categoryId: sec.categoryId,
       nameAr: sec.nameAr,
       icon: sec.icon ?? getCategoryIcon(sec.nameAr),
       contentPage,
-      businesses: sec.businesses.map((b) => ({
-        id: b.id,
-        nameAr: b.nameAr,
-        page: contentPage,
-      })),
+      businesses: sec.businesses.map((b) => ({ id: b.id, nameAr: b.nameAr, page: contentPage })),
     };
   });
 }
@@ -1006,11 +1019,7 @@ function PageNumberIndexPage({
       React.createElement(
         View,
         { key: `idx-cat-${entry.categoryId}`, style: styles.indexCategoryRow },
-        React.createElement(
-          Text,
-          { style: styles.indexPageNum },
-          `${entry.contentPage}`
-        ),
+        React.createElement(Text, { style: styles.indexPageNum }, `${entry.contentPage}`),
         React.createElement(
           Text,
           { style: styles.indexCategoryName },
@@ -1021,16 +1030,8 @@ function PageNumberIndexPage({
         React.createElement(
           View,
           { key: `idx-biz-${b.id}`, style: styles.indexBusinessRow },
-          React.createElement(
-            Text,
-            { style: styles.indexBusinessPageNum },
-            `${b.page}`
-          ),
-          React.createElement(
-            Text,
-            { style: styles.indexBusinessName },
-            b.nameAr
-          )
+          React.createElement(Text, { style: styles.indexBusinessPageNum }, `${b.page}`),
+          React.createElement(Text, { style: styles.indexBusinessName }, b.nameAr)
         )
       ),
     ])
@@ -1049,6 +1050,7 @@ function CategorySectionPage({
   layout,
   isPreview,
   inlineAd,
+  imageCache,
 }: {
   section: PdfCategorySection;
   qrMap: Map<string, string>;
@@ -1059,9 +1061,11 @@ function CategorySectionPage({
   layout: PdfLayoutConfig;
   isPreview: boolean;
   inlineAd?: PdfAdData | null;
+  imageCache: ImageCache;
 }) {
   const isDense = section.listingTemplate === "DENSE";
   const placement = inlineAd?.effectivePlacement ?? null;
+  const adDataUri = inlineAd ? resolveAdImage(inlineAd, imageCache) : null;
 
   const sponsorBadge =
     inlineAd && placement === "CATEGORY_SPONSOR"
@@ -1073,7 +1077,7 @@ function CategorySectionPage({
       ? React.createElement(
           View,
           { style: styles.adBannerBlock },
-          React.createElement(AdBannerElement, { ad: inlineAd, styles })
+          React.createElement(AdBannerElement, { ad: inlineAd, dataUri: adDataUri, styles })
         )
       : null;
 
@@ -1082,7 +1086,7 @@ function CategorySectionPage({
       ? React.createElement(
           View,
           { style: [styles.adBannerBlock, { marginTop: 8 }] },
-          React.createElement(AdBannerElement, { ad: inlineAd, styles })
+          React.createElement(AdBannerElement, { ad: inlineAd, dataUri: adDataUri, styles })
         )
       : null;
 
@@ -1094,11 +1098,7 @@ function CategorySectionPage({
         View,
         { style: styles.denseGrid },
         ...section.businesses.map((b) =>
-          React.createElement(BusinessCardDense, {
-            key: b.id,
-            business: b,
-            styles,
-          })
+          React.createElement(BusinessCardDense, { key: b.id, business: b, styles })
         )
       )
     : React.createElement(
@@ -1122,23 +1122,26 @@ function CategorySectionPage({
         {
           style: {
             display: "flex",
-            flexDirection: placement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
+            flexDirection:
+              placement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
             alignItems: "stretch",
             gap: 8,
             flex: 1,
           },
         },
         businessList,
-        React.createElement(AdSidebarElement, { ad: inlineAd!, styles })
+        React.createElement(AdSidebarElement, {
+          ad: inlineAd!,
+          dataUri: adDataUri,
+          styles,
+        })
       )
     : businessList;
 
   return React.createElement(
     Page,
     { size: pageSize, style: styles.page },
-    isPreview
-      ? React.createElement(Text, { style: styles.watermark }, "مسودة")
-      : null,
+    isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
     headerBanner,
     React.createElement(
       View,
@@ -1163,11 +1166,7 @@ function CategorySectionPage({
       )
     ),
     section.sectionIntroAr
-      ? React.createElement(
-          Text,
-          { style: styles.sectionIntro },
-          section.sectionIntroAr
-        )
+      ? React.createElement(Text, { style: styles.sectionIntro }, section.sectionIntroAr)
       : null,
     contentArea,
     footerBanner,
@@ -1200,57 +1199,26 @@ function WebsiteProfilePage({
       profile.logoUrl
         ? React.createElement(Image, {
             src: profile.logoUrl,
-            style: {
-              width: 80,
-              height: 40,
-              objectFit: "contain",
-              alignSelf: "flex-end",
-              marginBottom: 8,
-            },
+            style: { width: 80, height: 40, objectFit: "contain", alignSelf: "flex-end", marginBottom: 8 },
           })
         : null,
-      React.createElement(
-        Text,
-        { style: styles.profileTitle },
-        profile.titleAr
-      ),
+      React.createElement(Text, { style: styles.profileTitle }, profile.titleAr),
       profile.shortTextAr
-        ? React.createElement(
-            Text,
-            { style: styles.profileBody },
-            profile.shortTextAr
-          )
+        ? React.createElement(Text, { style: styles.profileBody }, profile.shortTextAr)
         : null,
       profile.bodyTextAr
-        ? React.createElement(
-            Text,
-            { style: styles.profileBody },
-            profile.bodyTextAr
-          )
+        ? React.createElement(Text, { style: styles.profileBody }, profile.bodyTextAr)
         : null,
       profile.websiteUrl
-        ? React.createElement(
-            Text,
-            { style: styles.profileMeta },
-            `الموقع: ${profile.websiteUrl}`
-          )
+        ? React.createElement(Text, { style: styles.profileMeta }, `الموقع: ${profile.websiteUrl}`)
         : null,
       profile.supportPhone
-        ? React.createElement(
-            Text,
-            { style: styles.profileMeta },
-            `الدعم: ${profile.supportPhone}`
-          )
+        ? React.createElement(Text, { style: styles.profileMeta }, `الدعم: ${profile.supportPhone}`)
         : null,
       profile.qrCodeUrl
         ? React.createElement(Image, {
             src: profile.qrCodeUrl,
-            style: {
-              width: 64,
-              height: 64,
-              alignSelf: "flex-end",
-              marginTop: 8,
-            },
+            style: { width: 64, height: 64, alignSelf: "flex-end", marginTop: 8 },
           })
         : null
     )
@@ -1275,40 +1243,18 @@ function DeveloperProfilePage({
       profile.profileImageUrl
         ? React.createElement(Image, {
             src: profile.profileImageUrl,
-            style: {
-              width: 60,
-              height: 60,
-              borderRadius: 30,
-              alignSelf: "flex-end",
-              marginBottom: 8,
-            },
+            style: { width: 60, height: 60, borderRadius: 30, alignSelf: "flex-end", marginBottom: 8 },
           })
         : null,
-      React.createElement(
-        Text,
-        { style: styles.profileTitle },
-        profile.fullName
-      ),
+      React.createElement(Text, { style: styles.profileTitle }, profile.fullName),
       profile.roleTitleAr
-        ? React.createElement(
-            Text,
-            { style: styles.profileMeta },
-            profile.roleTitleAr
-          )
+        ? React.createElement(Text, { style: styles.profileMeta }, profile.roleTitleAr)
         : null,
       profile.shortBioAr
-        ? React.createElement(
-            Text,
-            { style: styles.profileBody },
-            profile.shortBioAr
-          )
+        ? React.createElement(Text, { style: styles.profileBody }, profile.shortBioAr)
         : null,
       profile.ctaTextAr
-        ? React.createElement(
-            Text,
-            { style: styles.profileMeta },
-            profile.ctaTextAr
-          )
+        ? React.createElement(Text, { style: styles.profileMeta }, profile.ctaTextAr)
         : null
     )
   );
@@ -1329,6 +1275,7 @@ async function buildDocument(input: PdfDocumentInput) {
       ),
     }));
 
+  // ── QR codes ──────────────────────────────────────────────────────────────
   const qrMap = new Map<string, string>();
   if (input.includeQrCodes) {
     await Promise.all(
@@ -1340,6 +1287,10 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
+  // ── Pre-process all ad images via Sharp ───────────────────────────────────
+  const imageCache = await buildImageCache(input.ads);
+
+  // ── Partition ads ─────────────────────────────────────────────────────────
   const standaloneAds = input.ads
     .filter((a) => isStandalonePage(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
@@ -1349,14 +1300,13 @@ async function buildDocument(input: PdfDocumentInput) {
     .sort((a, b) => b.priority - a.priority);
 
   const pinnedStandalone = new Map<string, PdfAdData[]>();
-  const pinnedInline = new Map<string, PdfAdData>();
+  const pinnedInline     = new Map<string, PdfAdData>();
   const floatingStandalone: PdfAdData[] = [];
-  const floatingInline: PdfAdData[] = [];
+  const floatingInline:     PdfAdData[] = [];
 
   for (const ad of standaloneAds) {
     const pin = (ad as PdfAdData & { positionAfterCategoryId?: string })
       .positionAfterCategoryId;
-
     if (pin) {
       const arr = pinnedStandalone.get(pin) ?? [];
       arr.push(ad);
@@ -1369,7 +1319,6 @@ async function buildDocument(input: PdfDocumentInput) {
   for (const ad of inlineAds) {
     const pin = (ad as PdfAdData & { positionAfterCategoryId?: string })
       .positionAfterCategoryId;
-
     if (pin && !pinnedInline.has(pin)) {
       pinnedInline.set(pin, ad);
     } else {
@@ -1383,6 +1332,7 @@ async function buildDocument(input: PdfDocumentInput) {
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
 
+  // ── Assemble pages ────────────────────────────────────────────────────────
   pages.push(React.createElement(CoverPage, { key: "cover", input, styles }));
 
   if (hasIntro) {
@@ -1390,11 +1340,7 @@ async function buildDocument(input: PdfDocumentInput) {
       React.createElement(
         Page,
         { key: "intro", size: input.pageSize, style: styles.page },
-        React.createElement(
-          Text,
-          { style: styles.introText },
-          input.introTextAr
-        )
+        React.createElement(Text, { style: styles.introText }, input.introTextAr)
       )
     );
   }
@@ -1439,6 +1385,7 @@ async function buildDocument(input: PdfDocumentInput) {
         layout: input.layout,
         isPreview: input.isPreview,
         inlineAd: sectionInlineAd,
+        imageCache,
       })
     );
 
@@ -1448,6 +1395,7 @@ async function buildDocument(input: PdfDocumentInput) {
         React.createElement(StandaloneAdPage, {
           key: `ad-pinned-${ad.id}`,
           ad,
+          dataUri: resolveAdImage(ad, imageCache),
           styles,
           pageSize: input.pageSize,
         })
@@ -1461,11 +1409,11 @@ async function buildDocument(input: PdfDocumentInput) {
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
       floatSIdx++;
-
       pages.push(
         React.createElement(StandaloneAdPage, {
           key: `ad-float-${ad.id}-${idx}`,
           ad,
+          dataUri: resolveAdImage(ad, imageCache),
           styles,
           pageSize: input.pageSize,
         })
@@ -1478,11 +1426,7 @@ async function buildDocument(input: PdfDocumentInput) {
       React.createElement(
         Page,
         { key: "closing", size: input.pageSize, style: styles.page },
-        React.createElement(
-          Text,
-          { style: styles.introText },
-          input.closingTextAr
-        )
+        React.createElement(Text, { style: styles.introText }, input.closingTextAr)
       )
     );
   }
