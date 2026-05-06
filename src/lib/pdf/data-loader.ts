@@ -14,7 +14,8 @@ import type {
   PdfLayoutConfig,
 } from "./types";
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://nabk-directory.com";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://nabk-directory.com";
 
 function resolveAssetUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -70,8 +71,11 @@ export async function loadPdfEditionData(
   if (edition.cityIdsJson) {
     try {
       const parsed = JSON.parse(edition.cityIdsJson as string);
-      if (Array.isArray(parsed) && parsed.length > 0) cityIds = parsed as string[];
-    } catch { /* keep fallback */ }
+      if (Array.isArray(parsed) && parsed.length > 0)
+        cityIds = parsed as string[];
+    } catch {
+      /* keep fallback */
+    }
   }
 
   // ─ 3. Category filter
@@ -111,16 +115,24 @@ export async function loadPdfEditionData(
   }
 
   // ─ 6. Category configs
-  const editionCatMap = new Map(edition.editionCategories.map((ec) => [ec.categoryId, ec]));
+  const editionCatMap = new Map(
+    edition.editionCategories.map((ec) => [ec.categoryId, ec])
+  );
   const allCategoryIds = [...businessesByCategory.keys()];
-  const extraCategoryIds = allCategoryIds.filter((id) => !editionCatMap.has(id));
+  const extraCategoryIds = allCategoryIds.filter(
+    (id) => !editionCatMap.has(id)
+  );
   const extraCategories =
     extraCategoryIds.length > 0
-      ? await prisma.category.findMany({ where: { id: { in: extraCategoryIds } } })
+      ? await prisma.category.findMany({
+          where: { id: { in: extraCategoryIds } },
+        })
       : [];
 
   const categoryMetaMap = new Map([
-    ...edition.editionCategories.map((ec) => [ec.categoryId, ec.category] as const),
+    ...edition.editionCategories.map(
+      (ec) => [ec.categoryId, ec.category] as const
+    ),
     ...extraCategories.map((c) => [c.id, c] as const),
   ]);
 
@@ -154,13 +166,21 @@ export async function loadPdfEditionData(
         nameEn: meta.nameEn,
         icon: meta.icon,
         // These optional fields may not exist in PdfEditionCategory — use safe access
-        sectionTitleAr: (config as Record<string, unknown> | undefined)?.sectionTitleAr as string ?? null,
-        sectionIntroAr: (config as Record<string, unknown> | undefined)?.sectionIntroAr as string ?? null,
-        colorTheme: (config as Record<string, unknown> | undefined)?.colorTheme as string ?? null,
+        sectionTitleAr:
+          ((config as Record<string, unknown> | undefined)
+            ?.sectionTitleAr as string) ?? null,
+        sectionIntroAr:
+          ((config as Record<string, unknown> | undefined)
+            ?.sectionIntroAr as string) ?? null,
+        colorTheme:
+          ((config as Record<string, unknown> | undefined)
+            ?.colorTheme as string) ?? null,
         listingTemplate: config?.listingTemplate ?? "STANDARD",
         sortMode: config?.sortMode ?? "ALPHABETICAL",
         displayOrder: config?.displayOrder ?? idx,
-        startOnNewPage: (config as Record<string, unknown> | undefined)?.startOnNewPage as boolean ?? true,
+        startOnNewPage:
+          ((config as Record<string, unknown> | undefined)
+            ?.startOnNewPage as boolean) ?? true,
         businesses: mappedBusinesses,
       };
     })
@@ -180,7 +200,8 @@ export async function loadPdfEditionData(
         titleAr: ea.ad.titleAr,
         advertiserName: ea.ad.titleEn ?? ea.ad.titleAr,
         imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
-        linkUrl: ea.ad.linkUrl ?? null,
+        linkUrl: ea.ad.targetUrl ?? ea.ad.linkUrl ?? null,
+        phone: ea.ad.phone ?? null,
         placementType: ea.ad.placementType,
         priority: ea.ad.priority,
         effectivePlacement: ea.ad.placementType,
@@ -192,15 +213,19 @@ export async function loadPdfEditionData(
     ...editionAdMap.values(),
     ...allActiveAds
       .filter((a) => !editionAdMap.has(a.id))
-      .map((a) => ({
-        id: a.id,
-        titleAr: a.titleAr,
-        imageUrl: resolveAssetUrl(a.imageUrl) ?? "",
-        linkUrl: a.linkUrl ?? null,
-        placementType: a.placementType,
-        priority: a.priority,
-        effectivePlacement: a.placementType,
-      } as PdfAdData)),
+      .map(
+        (a) =>
+          ({
+            id: a.id,
+            titleAr: a.titleAr,
+            imageUrl: resolveAssetUrl(a.imageUrl) ?? "",
+            linkUrl: a.targetUrl ?? a.linkUrl ?? null,
+            phone: a.phone ?? null,
+            placementType: a.placementType,
+            priority: a.priority,
+            effectivePlacement: a.placementType,
+          }) as PdfAdData
+      ),
   ];
 
   // ─ 8. Config blobs
@@ -221,9 +246,9 @@ export async function loadPdfEditionData(
     titleAr: edition.titleAr,
     coverTitleAr: edition.coverTitleAr,
     coverSubtitleAr: edition.coverSubtitleAr,
-    introTextAr:      parseRichText(edition.introTextAr),
-    editorialTextAr:  parseRichText(edition.editorialTextAr),
-    closingTextAr:    parseRichText(edition.closingTextAr),
+    introTextAr: parseRichText(edition.introTextAr),
+    editorialTextAr: parseRichText(edition.editorialTextAr),
+    closingTextAr: parseRichText(edition.closingTextAr),
     editionNumber: edition.editionNumber,
     cityNameAr: edition.city.nameAr,
     pageSize: edition.pageSize as "A4" | "LETTER",

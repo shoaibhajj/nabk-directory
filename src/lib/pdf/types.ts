@@ -121,6 +121,7 @@ export interface PdfAdData {
   imageUrl: string;
   /** Maps to PdfAd.linkUrl */
   linkUrl?: string | null;
+  phone?: string | null;
   placementType: PdfAdPlacementType;
   priority: number;
   /** Set when overridePlacement is used in PdfEditionAd */

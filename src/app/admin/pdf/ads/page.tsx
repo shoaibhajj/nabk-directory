@@ -11,6 +11,7 @@ import {
   togglePdfAdActive,
 } from "@/app/actions/pdf-editions";
 import { DeleteAdButton } from "./_components/delete-ad-button";
+import { PlacementSelect } from "./_components/PlacementSelect";
 
 const PLACEMENT_LABELS: Record<string, string> = {
   FULL_PAGE:        "صفحة كاملة",
@@ -22,6 +23,84 @@ const PLACEMENT_LABELS: Record<string, string> = {
   FOOTER_BANNER:    "بانر أسفل الصفحة",
   CATEGORY_SPONSOR: "راعي تصنيف",
 };
+
+// const AD_IMAGE_HINTS: Record<
+//   string,
+//   { label: string; dimensions: string; ratio: string; icon: string }
+// > = {
+//   FULL_PAGE: {
+//     label: "صفحة كاملة",
+//     dimensions: "794 × 1123 بكسل",
+//     ratio: "A4 عمودي",
+//     icon: "📄",
+//   },
+//   HALF_PAGE_TOP: {
+//     label: "نصف صفحة علوي",
+//     dimensions: "794 × 400 بكسل",
+//     ratio: "أفقي 2:1",
+//     icon: "⬆️",
+//   },
+//   HALF_PAGE_BOTTOM: {
+//     label: "نصف صفحة سفلي",
+//     dimensions: "794 × 400 بكسل",
+//     ratio: "أفقي 2:1",
+//     icon: "⬇️",
+//   },
+//   SIDEBAR_LEFT: {
+//     label: "عمود جانبي أيسر",
+//     dimensions: "200 × 600 بكسل",
+//     ratio: "عمودي 1:3",
+//     icon: "◀️",
+//   },
+//   SIDEBAR_RIGHT: {
+//     label: "عمود جانبي أيمن",
+//     dimensions: "200 × 600 بكسل",
+//     ratio: "عمودي 1:3",
+//     icon: "▶️",
+//   },
+//   HEADER_BANNER: {
+//     label: "شريط علوي",
+//     dimensions: "794 × 80 بكسل",
+//     ratio: "رفيع 10:1",
+//     icon: "🔝",
+//   },
+//   FOOTER_BANNER: {
+//     label: "شريط سفلي",
+//     dimensions: "794 × 80 بكسل",
+//     ratio: "رفيع 10:1",
+//     icon: "🔚",
+//   },
+//   CATEGORY_SPONSOR: {
+//     label: "راعي قسم",
+//     dimensions: "200 × 60 بكسل",
+//     ratio: "أفقي صغير",
+//     icon: "🏷️",
+//   },
+// };
+
+// function ImageSizeHint({ placement }: { placement: string }) {
+//   const hint = AD_IMAGE_HINTS[placement];
+//   if (!hint) return null;
+
+//   return (
+//     <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-900 dark:bg-blue-950">
+//       <span className="text-base">{hint.icon}</span>
+//       <div className="flex flex-col gap-0.5">
+//         <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+//           الحجم الموصى به لـ &quot;{hint.label}&quot;
+//         </p>
+//         <div className="flex items-center gap-2">
+//           <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+//             {hint.dimensions}
+//           </code>
+//           <span className="text-xs text-blue-500 dark:text-blue-400">
+//             — {hint.ratio}
+//           </span>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 export default async function PdfAdsPage() {
   await requireAdmin("/admin/pdf/ads");
@@ -74,54 +153,132 @@ export default async function PdfAdsPage() {
         <h2 className="mb-4 text-lg font-semibold">إضافة إعلان جديد</h2>
         <form action={createPdfAd} className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-titleAr">عنوان *</label>
-            <input id="cr-titleAr" name="titleAr" required
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-titleAr"
+            >
+              عنوان *
+            </label>
+            <input
+              id="cr-titleAr"
+              name="titleAr"
+              required
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-advertiserName">اسم المعلن *</label>
-            <input id="cr-advertiserName" name="advertiserName" required
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-advertiserName"
+            >
+              اسم المعلن *
+            </label>
+            <input
+              id="cr-advertiserName"
+              name="advertiserName"
+              required
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-imageUrl">رابط الصورة *</label>
-            <input id="cr-imageUrl" name="imageUrl" required dir="ltr" placeholder="https://..."
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-imageUrl"
+            >
+              رابط الصورة *
+            </label>
+            <input
+              id="cr-imageUrl"
+              name="imageUrl"
+              required
+              dir="ltr"
+              placeholder="https://..."
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-placementType">نوع الموضع</label>
-            <select id="cr-placementType" name="placementType" defaultValue="FULL_PAGE"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+          {/* <div>
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-placementType"
+            >
+              نوع الموضع
+            </label>
+            <select
+              id="cr-placementType"
+              name="placementType"
+              defaultValue="FULL_PAGE"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            >
               {Object.entries(PLACEMENT_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
+                <option key={v} value={v}>
+                  {l}
+                </option>
               ))}
             </select>
-          </div>
+          </div> */}
+
+          <PlacementSelect defaultValue="FULL_PAGE" imageFieldId="cr" />
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-priority">الأولوية (0–100)</label>
-            <input id="cr-priority" name="priority" type="number" defaultValue={0} min={0} max={100}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-priority"
+            >
+              الأولوية (0–100)
+            </label>
+            <input
+              id="cr-priority"
+              name="priority"
+              type="number"
+              defaultValue={0}
+              min={0}
+              max={100}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold">
               📌 تثبيت بعد تصنيف
-              <span className="mr-1 font-normal text-muted-foreground">(اختياري)</span>
+              <span className="mr-1 font-normal text-muted-foreground">
+                (اختياري)
+              </span>
             </label>
             <CategorySelect name="positionAfterCategoryId" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-targetUrl">رابط المعلن (اختياري)</label>
-            <input id="cr-targetUrl" name="targetUrl" dir="ltr" placeholder="https://..."
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-targetUrl"
+            >
+              رابط المعلن (اختياري)
+            </label>
+            <input
+              id="cr-targetUrl"
+              name="targetUrl"
+              dir="ltr"
+              placeholder="https://..."
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="cr-phone">هاتف (اختياري)</label>
-            <input id="cr-phone" name="phone" dir="ltr" placeholder="+963..."
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <label
+              className="mb-1 block text-xs font-semibold"
+              htmlFor="cr-phone"
+            >
+              هاتف (اختياري)
+            </label>
+            <input
+              id="cr-phone"
+              name="phone"
+              dir="ltr"
+              placeholder="+963..."
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            />
           </div>
           <div className="sm:col-span-2">
-            <button type="submit"
-              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent/90">
+            <button
+              type="submit"
+              className="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent/90"
+            >
               إضافة الإعلان
             </button>
           </div>
@@ -137,10 +294,9 @@ export default async function PdfAdsPage() {
       ) : (
         <div className="space-y-4">
           {ads.map((ad) => {
-            const pinnedCategoryName =
-              ad.positionAfterCategoryId
-                ? (categoryMap.get(ad.positionAfterCategoryId) ?? "تصنيف محذوف")
-                : null;
+            const pinnedCategoryName = ad.positionAfterCategoryId
+              ? (categoryMap.get(ad.positionAfterCategoryId) ?? "تصنيف محذوف")
+              : null;
 
             return (
               <div
@@ -159,7 +315,9 @@ export default async function PdfAdsPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{ad.titleAr}</span>
                       {ad.titleEn && (
-                        <span className="text-sm text-muted-foreground">({ad.titleEn})</span>
+                        <span className="text-sm text-muted-foreground">
+                          ({ad.titleEn})
+                        </span>
                       )}
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -188,14 +346,17 @@ export default async function PdfAdsPage() {
                     </div>
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                       {ad.targetUrl && (
-                        <a href={ad.targetUrl} target="_blank" rel="noopener noreferrer"
-                          className="hover:text-foreground underline" dir="ltr">
+                        <a
+                          href={ad.targetUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-foreground underline"
+                          dir="ltr"
+                        >
                           {ad.targetUrl}
                         </a>
                       )}
-                      {ad.phone && (
-                        <span dir="ltr">{ad.phone}</span>
-                      )}
+                      {ad.phone && <span dir="ltr">{ad.phone}</span>}
                     </div>
                   </div>
                 </div>
@@ -206,7 +367,9 @@ export default async function PdfAdsPage() {
                     className="flex cursor-pointer list-none items-center gap-2 px-4 py-2 text-sm
                     font-semibold text-accent hover:bg-secondary/40"
                   >
-                    <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+                    <span className="inline-block transition-transform group-open:rotate-90">
+                      ▶
+                    </span>
                     تعديل بيانات الإعلان
                   </summary>
                   <form
@@ -214,7 +377,9 @@ export default async function PdfAdsPage() {
                     className="grid gap-3 p-4 pt-3 sm:grid-cols-2"
                   >
                     <div>
-                      <label className="mb-1 block text-xs font-semibold">عنوان</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        عنوان
+                      </label>
                       <input
                         name="titleAr"
                         defaultValue={ad.titleAr}
@@ -223,7 +388,9 @@ export default async function PdfAdsPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold">اسم المعلن</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        اسم المعلن
+                      </label>
                       <input
                         name="advertiserName"
                         defaultValue={ad.titleEn ?? ""}
@@ -231,7 +398,9 @@ export default async function PdfAdsPage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-semibold">رابط الصورة</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        رابط الصورة
+                      </label>
                       <input
                         name="imageUrl"
                         defaultValue={ad.imageUrl}
@@ -246,20 +415,30 @@ export default async function PdfAdsPage() {
                       المتصفح يُرسل آخر قيمة — لكن لضمان Server Actions نستخدم
                       select فقط بدون hidden input.
                     */}
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold">نوع الموضع</label>
+                    {/* <div>
+                      <label className="mb-1 block text-xs font-semibold">
+                        نوع الموضع
+                      </label>
                       <select
                         name="placementType"
                         defaultValue={ad.placementType}
                         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                       >
                         {Object.entries(PLACEMENT_LABELS).map(([v, l]) => (
-                          <option key={v} value={v}>{l}</option>
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
                         ))}
                       </select>
-                    </div>
+                    </div> */}
+                    <PlacementSelect
+                      defaultValue="FULL_PAGE"
+                      imageFieldId="cr"
+                    />
                     <div>
-                      <label className="mb-1 block text-xs font-semibold">الأولوية (0–100)</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        الأولوية (0–100)
+                      </label>
                       <input
                         name="priority"
                         type="number"
@@ -279,7 +458,9 @@ export default async function PdfAdsPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold">رابط المعلن</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        رابط المعلن
+                      </label>
                       <input
                         name="targetUrl"
                         defaultValue={ad.targetUrl ?? ""}
@@ -289,7 +470,9 @@ export default async function PdfAdsPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold">هاتف</label>
+                      <label className="mb-1 block text-xs font-semibold">
+                        هاتف
+                      </label>
                       <input
                         name="phone"
                         defaultValue={ad.phone ?? ""}
