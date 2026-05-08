@@ -4,8 +4,8 @@
  * ✔ Index: page numbers on RIGHT side (RTL)
  * ✔ Ad placement fully respected:
  *   FULL_PAGE            → standalone page (full bleed image)
- *   HALF_PAGE_TOP/BOTTOM → half-height block on its own page
- *   SIDEBAR_LEFT/RIGHT   → 2-column layout: businesses | ad strip
+ *   HALF_PAGE_TOP/BOTTOM → inline inside CategorySectionPage (top / bottom)
+ *   SIDEBAR_LEFT/RIGHT   → 2-column layout: businesses | stacked ad strips
  *   HEADER_BANNER        → thin banner at top of section page
  *   FOOTER_BANNER        → thin banner at bottom of section page
  *   CATEGORY_SPONSOR     → sponsor badge in the section header
@@ -315,7 +315,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       objectFit: "contain",   // safety net; image is already the right size
     },
 
-    // HALF_PAGE — occupies roughly half the page height
+    // HALF_PAGE — occupies roughly half the page height (inline inside section)
     // The image has been resized to PAGE_INNER_W × (PAGE_INNER_W/1.78) by Sharp.
     adHalfBlock: {
       width: "100%",
@@ -323,7 +323,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       objectFit: "contain",  // no cropping in the renderer either
     },
 
-    // SIDEBAR column wrapper
+    // SIDEBAR column wrapper — supports multiple stacked ads
     adSidebarCol: {
       width: SIDEBAR_W,
       flexShrink: 0,
@@ -334,14 +334,15 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       flexDirection: "column",
       alignItems: "stretch",
       alignSelf: "stretch",
+      gap: 6,
     },
 
-    // SIDEBAR image — fills column width; height driven by image content
+    // SIDEBAR image — fixed height to prevent page-wrap errors
     adSidebarImg: {
       width: "100%",
-      flexGrow: 1,
+      height: 200,
+      maxHeight: 200,
       objectFit: "contain",  // never crop; Sharp already letterboxed
-      minHeight: 120,
     },
 
     adSidebarText: {
@@ -582,7 +583,8 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
 // ── Ad placement helpers ─────────────────────────────────────────────────────
 
 function isStandalonePage(placement: string): boolean {
-  return ["FULL_PAGE", "HALF_PAGE_TOP", "HALF_PAGE_BOTTOM"].includes(placement);
+  // HALF_PAGE_TOP/BOTTOM are now rendered inline inside CategorySectionPage
+  return placement === "FULL_PAGE";
 }
 
 function isInlinePlacement(placement: string): boolean {
@@ -592,6 +594,8 @@ function isInlinePlacement(placement: string): boolean {
     "HEADER_BANNER",
     "FOOTER_BANNER",
     "CATEGORY_SPONSOR",
+    "HALF_PAGE_TOP",
+    "HALF_PAGE_BOTTOM",
   ].includes(placement);
 }
 
@@ -690,24 +694,27 @@ function AdBannerElement({
 }
 
 function AdSidebarElement({
-  ad,
-  dataUri,
+  ads,
   styles,
+  imageCache,
 }: {
-  ad: PdfAdData;
-  dataUri: string | null;
+  ads: PdfAdData[];
   styles: ReturnType<typeof makeStyles>;
+  imageCache: ImageCache;
 }) {
-  const href = getAdHref(ad);
-
-  const content = dataUri
-    ? React.createElement(Image, { src: dataUri, style: styles.adSidebarImg })
-    : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr);
-
   return React.createElement(
     View,
     { style: styles.adSidebarCol },
-    wrapWithLink(href, content, { width: "100%" })
+    ...ads.map((ad) => {
+      const href = getAdHref(ad);
+      const dataUri = resolveAdImage(ad, imageCache);
+
+      const content = dataUri
+        ? React.createElement(Image, { src: dataUri, style: styles.adSidebarImg })
+        : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr);
+
+      return wrapWithLink(href, content, { width: "100%" });
+    })
   );
 }
 
@@ -729,7 +736,36 @@ function AdSponsorBadge({
   );
 }
 
-// ── Standalone ad page ──────────────────────────────────────────────────────
+// ── Half-page ad block (inline, rendered inside CategorySectionPage) ─────────
+
+function AdHalfPageBlock({
+  ad,
+  dataUri,
+  styles,
+}: {
+  ad: PdfAdData;
+  dataUri: string | null;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const href = getAdHref(ad);
+
+  const imageNode = dataUri
+    ? React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
+    : React.createElement(
+        View,
+        { style: [styles.adTextCard, { height: 250 }] },
+        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
+      );
+
+  return React.createElement(
+    View,
+    { style: { width: "100%", marginVertical: 8 } },
+    wrapWithLink(href, imageNode, { width: "100%" })
+  );
+}
+
+// ── Standalone ad page (FULL_PAGE only) ─────────────────────────────────────
 
 function StandaloneAdPage({
   ad,
@@ -742,57 +778,31 @@ function StandaloneAdPage({
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
 }) {
-  const placement = ad.effectivePlacement;
   const href = getAdHref(ad);
 
-  if (placement === "FULL_PAGE") {
-    if (dataUri) {
-      const image = React.createElement(Image, {
-        src: dataUri,
-        style: styles.adFullPage,
-      });
-      return React.createElement(
-        Page,
-        { size: pageSize, style: styles.adStandalonePage },
-        wrapWithLink(href, image, { width: "100%", height: "100%" })
-      );
-    }
-
-    // No image fallback
-    const textCard = React.createElement(
-      View,
-      { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
-      React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-      React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
-    );
+  if (dataUri) {
+    const image = React.createElement(Image, {
+      src: dataUri,
+      style: styles.adFullPage,
+    });
     return React.createElement(
       Page,
-      { size: pageSize, style: styles.coverPage },
-      wrapWithLink(href, textCard)
+      { size: pageSize, style: styles.adStandalonePage },
+      wrapWithLink(href, image, { width: "100%", height: "100%" })
     );
   }
 
-  // HALF_PAGE_TOP / HALF_PAGE_BOTTOM
-  const isTop = placement === "HALF_PAGE_TOP";
-
-  const imageNode = dataUri
-    ? React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
-    : React.createElement(
-        View,
-        { style: [styles.adTextCard, { height: 250 }] },
-        React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
-      );
-
-  const halfBlock = dataUri
-    ? wrapWithLink(href, imageNode, { width: "100%" })
-    : wrapWithLink(href, imageNode);
-
+  // No image fallback
+  const textCard = React.createElement(
+    View,
+    { style: [styles.adTextCard, { width: "80%", padding: 40 }] },
+    React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
+    React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
+  );
   return React.createElement(
     Page,
-    { size: pageSize, style: styles.page },
-    isTop ? halfBlock : React.createElement(View, { style: { flex: 1 } }),
-    isTop ? React.createElement(View, { style: { flex: 1 } }) : halfBlock
+    { size: pageSize, style: styles.coverPage },
+    wrapWithLink(href, textCard)
   );
 }
 
@@ -875,10 +885,10 @@ function BusinessCardStandard({
               { style: styles.phoneRow },
               ...business.phoneNumbers
                 .slice(0, 3)
-                .map((p) =>
+                .map((p, i) =>
                   React.createElement(
                     View,
-                    { key: p.number, style: styles.phoneChip },
+                    { key: `${p.number}-${i}`, style: styles.phoneChip },
                     React.createElement(Text, { style: styles.phoneText }, p.number)
                   )
                 )
@@ -905,8 +915,8 @@ function BusinessCardDense({
       : null,
     ...business.phoneNumbers
       .slice(0, 2)
-      .map((p) =>
-        React.createElement(Text, { key: p.number, style: styles.phoneText }, p.number)
+      .map((p, i) =>
+        React.createElement(Text, { key: `${p.number}-${i}`, style: styles.phoneText }, p.number)
       )
   );
 }
@@ -1049,6 +1059,9 @@ function CategorySectionPage({
   includeLogo,
   layout,
   isPreview,
+  sidebarAds,
+  halfPageTopAd,
+  halfPageBottomAd,
   inlineAd,
   imageCache,
 }: {
@@ -1060,10 +1073,15 @@ function CategorySectionPage({
   includeLogo: boolean;
   layout: PdfLayoutConfig;
   isPreview: boolean;
+  sidebarAds: PdfAdData[];
+  halfPageTopAd: PdfAdData | null;
+  halfPageBottomAd: PdfAdData | null;
   inlineAd?: PdfAdData | null;
   imageCache: ImageCache;
 }) {
   const isDense = section.listingTemplate === "DENSE";
+
+  // Resolve the single inlineAd (for HEADER_BANNER, FOOTER_BANNER, CATEGORY_SPONSOR)
   const placement = inlineAd?.effectivePlacement ?? null;
   const adDataUri = inlineAd ? resolveAdImage(inlineAd, imageCache) : null;
 
@@ -1090,8 +1108,7 @@ function CategorySectionPage({
         )
       : null;
 
-  const hasSidebar =
-    inlineAd && (placement === "SIDEBAR_LEFT" || placement === "SIDEBAR_RIGHT");
+  const hasSidebar = sidebarAds.length > 0;
 
   const businessList = isDense
     ? React.createElement(
@@ -1116,6 +1133,9 @@ function CategorySectionPage({
         )
       );
 
+  // Determine sidebar direction from first sidebar ad placement
+  const sidebarPlacement = sidebarAds[0]?.effectivePlacement ?? "SIDEBAR_RIGHT";
+
   const contentArea = hasSidebar
     ? React.createElement(
         View,
@@ -1123,7 +1143,7 @@ function CategorySectionPage({
           style: {
             display: "flex",
             flexDirection:
-              placement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
+              sidebarPlacement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
             alignItems: "stretch",
             gap: 8,
             flex: 1,
@@ -1131,12 +1151,29 @@ function CategorySectionPage({
         },
         businessList,
         React.createElement(AdSidebarElement, {
-          ad: inlineAd!,
-          dataUri: adDataUri,
+          ads: sidebarAds,
           styles,
+          imageCache,
         })
       )
     : businessList;
+
+  // Half-page blocks
+  const halfTopBlock = halfPageTopAd
+    ? React.createElement(AdHalfPageBlock, {
+        ad: halfPageTopAd,
+        dataUri: resolveAdImage(halfPageTopAd, imageCache),
+        styles,
+      })
+    : null;
+
+  const halfBottomBlock = halfPageBottomAd
+    ? React.createElement(AdHalfPageBlock, {
+        ad: halfPageBottomAd,
+        dataUri: resolveAdImage(halfPageBottomAd, imageCache),
+        styles,
+      })
+    : null;
 
   return React.createElement(
     Page,
@@ -1168,7 +1205,9 @@ function CategorySectionPage({
     section.sectionIntroAr
       ? React.createElement(Text, { style: styles.sectionIntro }, section.sectionIntroAr)
       : null,
+    halfTopBlock,
     contentArea,
+    halfBottomBlock,
     footerBanner,
     layout.showPageNumbers
       ? React.createElement(Text, {
@@ -1299,10 +1338,9 @@ async function buildDocument(input: PdfDocumentInput) {
     .filter((a) => isInlinePlacement(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
 
+  // ── Pinned standalone ads (FULL_PAGE only now) ────────────────────────────
   const pinnedStandalone = new Map<string, PdfAdData[]>();
-  const pinnedInline     = new Map<string, PdfAdData>();
   const floatingStandalone: PdfAdData[] = [];
-  const floatingInline:     PdfAdData[] = [];
 
   for (const ad of standaloneAds) {
     const pin = (ad as PdfAdData & { positionAfterCategoryId?: string })
@@ -1316,18 +1354,58 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   }
 
+  // ── Pinned inline ads (banner, sponsor, sidebar, half-page) ───────────────
+  const pinnedInline     = new Map<string, PdfAdData>();
+  // Multi-sidebar: group sidebar ads by categoryId
+  const pinnedSidebar    = new Map<string, PdfAdData[]>();
+  const pinnedHalfTop    = new Map<string, PdfAdData>();
+  const pinnedHalfBottom = new Map<string, PdfAdData>();
+
+  const floatingInline:     PdfAdData[] = [];
+  const floatingSidebar:    PdfAdData[] = [];
+  const floatingHalfTop:    PdfAdData[] = [];
+  const floatingHalfBottom: PdfAdData[] = [];
+
   for (const ad of inlineAds) {
     const pin = (ad as PdfAdData & { positionAfterCategoryId?: string })
       .positionAfterCategoryId;
-    if (pin && !pinnedInline.has(pin)) {
-      pinnedInline.set(pin, ad);
+    const p   = ad.effectivePlacement;
+
+    if (p === "SIDEBAR_LEFT" || p === "SIDEBAR_RIGHT") {
+      if (pin) {
+        const arr = pinnedSidebar.get(pin) ?? [];
+        arr.push(ad);
+        pinnedSidebar.set(pin, arr);
+      } else {
+        floatingSidebar.push(ad);
+      }
+    } else if (p === "HALF_PAGE_TOP") {
+      if (pin && !pinnedHalfTop.has(pin)) {
+        pinnedHalfTop.set(pin, ad);
+      } else {
+        floatingHalfTop.push(ad);
+      }
+    } else if (p === "HALF_PAGE_BOTTOM") {
+      if (pin && !pinnedHalfBottom.has(pin)) {
+        pinnedHalfBottom.set(pin, ad);
+      } else {
+        floatingHalfBottom.push(ad);
+      }
     } else {
-      floatingInline.push(ad);
+      // HEADER_BANNER, FOOTER_BANNER, CATEGORY_SPONSOR
+      if (pin && !pinnedInline.has(pin)) {
+        pinnedInline.set(pin, ad);
+      } else {
+        floatingInline.push(ad);
+      }
     }
   }
 
-  let floatSIdx = 0;
-  let floatIIdx = 0;
+  let floatSIdx  = 0;
+  let floatIIdx  = 0;
+  let floatSBIdx = 0;
+  let floatHTIdx = 0;
+  let floatHBIdx = 0;
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
@@ -1365,12 +1443,41 @@ async function buildDocument(input: PdfDocumentInput) {
       })
     );
 
+    // Resolve inline ad (banner / sponsor)
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       sectionInlineAd = pinnedInline.get(section.categoryId)!;
     } else if (floatingInline.length > 0 && idx % 2 === 0) {
       sectionInlineAd = floatingInline[floatIIdx % floatingInline.length];
       floatIIdx++;
+    }
+
+    // Resolve sidebar ads (multi)
+    let activeSidebarAds: PdfAdData[] = [];
+    if (pinnedSidebar.has(section.categoryId)) {
+      activeSidebarAds = pinnedSidebar.get(section.categoryId)!;
+    } else if (floatingSidebar.length > 0 && idx % 3 === 0) {
+      // Distribute sidebar ads round-robin, taking up to 3 per section
+      const start = floatSBIdx % floatingSidebar.length;
+      activeSidebarAds = [floatingSidebar[start]];
+      floatSBIdx++;
+    }
+
+    // Resolve half-page ads
+    let halfTopAd: PdfAdData | null = null;
+    if (pinnedHalfTop.has(section.categoryId)) {
+      halfTopAd = pinnedHalfTop.get(section.categoryId)!;
+    } else if (floatingHalfTop.length > 0 && idx % 4 === 0) {
+      halfTopAd = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
+      floatHTIdx++;
+    }
+
+    let halfBottomAd: PdfAdData | null = null;
+    if (pinnedHalfBottom.has(section.categoryId)) {
+      halfBottomAd = pinnedHalfBottom.get(section.categoryId)!;
+    } else if (floatingHalfBottom.length > 0 && idx % 4 === 1) {
+      halfBottomAd = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
+      floatHBIdx++;
     }
 
     pages.push(
@@ -1385,10 +1492,14 @@ async function buildDocument(input: PdfDocumentInput) {
         layout: input.layout,
         isPreview: input.isPreview,
         inlineAd: sectionInlineAd,
+        sidebarAds: activeSidebarAds,
+        halfPageTopAd: halfTopAd,
+        halfPageBottomAd: halfBottomAd,
         imageCache,
       })
     );
 
+    // Standalone (FULL_PAGE) ads after section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
       pages.push(
