@@ -18,6 +18,8 @@
  *     in data-loader, but double-checked here for safety)
  *   - pageNumbers: if non-empty, ad only appears in sections whose index is
  *     in the pageNumbers array; empty = show in all sections (round-robin)
+ * ✔ Fix: QR code is now a clickable Link → business.publicUrl
+ * ✔ Fix: Business logo (media_files image) removed from card entirely
  */
 
 import React from "react";
@@ -302,8 +304,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       height: "100%",
       objectFit: "contain",
     },
-    // ── FIX: adHalfBlock now has explicit height + overflow hidden
-    //    prevents image from expanding beyond the allocated space
     adHalfBlock: {
       width: "100%",
       height: 180,
@@ -338,7 +338,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       flexShrink: 0,
     },
-    // ── FIX: adBannerBlock wraps image with fixed height + overflow hidden
     adBannerBlock: {
       width: "100%",
       height: 80,
@@ -631,7 +630,6 @@ function AdBannerElement({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  // FIX: wrap in View with fixed height so image never bleeds outside 80pt
   const content = React.createElement(
     View,
     { style: styles.adBannerBlock },
@@ -682,7 +680,6 @@ function AdHalfPageBlock({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  // FIX: wrap image in View with maxHeight so it never inflates the page
   const imageNode = dataUri
     ? React.createElement(
         View,
@@ -807,7 +804,7 @@ function PageNumberIndexPage({
 
 // ── Category section page ─────────────────────────────────────────────────────────────────
 function CategorySectionPage({
-  section, qrMap, styles, pageSize, includeQr, includeLogo,
+  section, qrMap, styles, pageSize, includeQr,
   layout, isPreview, sidebarAds, halfPageTopAd, halfPageBottomAd,
   inlineAd, imageCache,
 }: {
@@ -816,7 +813,6 @@ function CategorySectionPage({
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
   includeQr: boolean;
-  includeLogo: boolean;
   layout: PdfLayoutConfig;
   isPreview: boolean;
   sidebarAds: PdfAdData[];
@@ -855,7 +851,7 @@ function CategorySectionPage({
           React.createElement(BusinessCardStandard, {
             key: b.id, business: b,
             qrDataUrl: qrMap.get(b.id),
-            styles, includeQr, includeLogo,
+            styles, includeQr,
           })));
 
   const sidebarPlacement = sidebarAds[0]?.effectivePlacement ?? "SIDEBAR_RIGHT";
@@ -926,13 +922,12 @@ function CategorySectionPage({
 
 // ── Business card components ─────────────────────────────────────────────────────────────────
 function BusinessCardStandard({
-  business, qrDataUrl, styles, includeQr, includeLogo,
+  business, qrDataUrl, styles, includeQr,
 }: {
   business: PdfBusiness;
   qrDataUrl: string | undefined;
   styles: ReturnType<typeof makeStyles>;
   includeQr: boolean;
-  includeLogo: boolean;
 }) {
   const phones = business.phoneNumbers ?? [];
   const phoneSection = phones.length > 0
@@ -942,18 +937,20 @@ function BusinessCardStandard({
             React.createElement(Text, { style: styles.phoneText }, p.number))))
     : null;
 
+  // QR: clickable link to business public page
   const qrSection = includeQr && qrDataUrl
-    ? React.createElement(View, { style: { alignItems: "flex-end", marginTop: 4 } },
-        React.createElement(Image, { src: qrDataUrl, style: styles.qrImage }),
-        React.createElement(Text, { style: styles.qrHint }, "اضغط هنا\nلترى المزيد من\nالمعلومات"))
+    ? wrapWithLink(
+        business.publicUrl,
+        React.createElement(
+          View, { style: { alignItems: "center", marginTop: 4 } },
+          React.createElement(Image, { src: qrDataUrl, style: styles.qrImage }),
+          React.createElement(Text, { style: styles.qrHint }, "اضغط هنا\nلترى المزيد من\nالمعلومات")
+        ),
+        { alignItems: "center" }
+      )
     : null;
 
-  const logoSection = includeLogo && business.logoUrl
-    ? React.createElement(Image, {
-        src: business.logoUrl,
-        style: { width: 40, height: 40, objectFit: "contain", alignSelf: "flex-end", marginBottom: 4 },
-      })
-    : null;
+  // Logo/business image intentionally removed per design decision
 
   return React.createElement(
     View, { style: styles.businessCard },
@@ -968,7 +965,7 @@ function BusinessCardStandard({
           : null,
         phoneSection
       ),
-      React.createElement(View, { style: { alignItems: "center" } }, logoSection, qrSection)
+      qrSection
     )
   );
 }
@@ -1140,8 +1137,7 @@ async function buildDocument(input: PdfDocumentInput) {
   let floatIIdx  = 0; // HEADER/FOOTER/SPONSOR
   let floatHTIdx = 0; // HALF_PAGE_TOP
   let floatHBIdx = 0; // HALF_PAGE_BOTTOM
-  // FIX: sidebar uses a window-start pointer; advances by 1 each section
-  let floatSBStart = 0;
+  let floatSBStart = 0; // sidebar window-start pointer
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
@@ -1192,9 +1188,7 @@ async function buildDocument(input: PdfDocumentInput) {
       }
     }
 
-    // ─ Sidebar ads
-    // FIX: true round-robin — each section starts from a different offset
-    // and collects up to maxSidebarAds allowed ads.
+    // ─ Sidebar ads — true round-robin
     let activeSidebarAds: PdfAdData[] = [];
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
@@ -1210,7 +1204,6 @@ async function buildDocument(input: PdfDocumentInput) {
         }
       }
       activeSidebarAds = collected;
-      // Advance start pointer so next section gets a different first ad
       floatSBStart = (floatSBStart + 1) % floatingSidebar.length;
     }
 
@@ -1246,7 +1239,6 @@ async function buildDocument(input: PdfDocumentInput) {
         section, qrMap, styles,
         pageSize: input.pageSize,
         includeQr: input.includeQrCodes,
-        includeLogo: input.includeBusinessLogos,
         layout: input.layout,
         isPreview: input.isPreview,
         inlineAd: sectionInlineAd,
@@ -1257,7 +1249,7 @@ async function buildDocument(input: PdfDocumentInput) {
       })
     );
 
-    // ─ Standalone (FULL_PAGE) ads after section
+    // ─ Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
       if (adAllowedInSection(ad, idx)) {
@@ -1271,7 +1263,7 @@ async function buildDocument(input: PdfDocumentInput) {
       }
     }
 
-    // FIX: floating FULL_PAGE ads — every 2 sections (not 3), skip if pinned ad shown
+    // ─ Floating FULL_PAGE ads — every 2 sections, skip if pinned shown
     if (
       floatingStandalone.length > 0 &&
       (idx + 1) % 2 === 0 &&
@@ -1341,8 +1333,7 @@ export async function generatePdf(
 
 /** Count top-level Page elements in the document tree. */
 function pages_count(doc: React.ReactElement): number {
-  // React.ReactElement's props may be typed as {} — cast to any to safely access children
-  const children = (doc as any)?.props?.children;
+  const children = (doc as any)?.props?.children; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!children) return 0;
   const arr = Array.isArray(children) ? children : [children];
   return arr.filter(
