@@ -51,13 +51,11 @@ export async function getAvailableAds(editionId: string) {
 
 export async function addAdToEdition(editionId: string, adId: string) {
   await requireAdmin();
-  // assign next priority
   const max = await prisma.pdfEditionAd.aggregate({
     where: { editionId },
     _max: { priority: true },
   });
   const nextPriority = (max._max.priority ?? -1) + 1;
-
   await prisma.pdfEditionAd.create({
     data: { editionId, adId, priority: nextPriority },
   });
@@ -70,7 +68,11 @@ export async function removeAdFromEdition(id: string, editionId: string) {
   revalidatePath(`/admin/pdf/editions/${editionId}/ads`);
 }
 
-export async function toggleEditionAd(id: string, editionId: string, isActive: boolean) {
+export async function toggleEditionAd(
+  id: string,
+  editionId: string,
+  isActive: boolean
+) {
   await requireAdmin();
   await prisma.pdfEditionAd.update({ where: { id }, data: { isActive } });
   revalidatePath(`/admin/pdf/editions/${editionId}/ads`);
@@ -104,5 +106,41 @@ export async function reorderEditionAds(
       })
     )
   );
+  revalidatePath(`/admin/pdf/editions/${editionId}/ads`);
+}
+
+/**
+ * Move a single row up or down by swapping priorities with its neighbour.
+ * allIds = ordered list of PdfEditionAd.id values (sorted by priority asc).
+ */
+export async function moveEditionAd(
+  id: string,
+  editionId: string,
+  direction: "up" | "down",
+  allIds: string[]
+) {
+  await requireAdmin();
+
+  const currentIndex = allIds.indexOf(id);
+  if (currentIndex === -1) return;
+
+  const targetIndex =
+    direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= allIds.length) return;
+
+  const neighbourId = allIds[targetIndex];
+
+  // Swap priorities
+  await prisma.$transaction([
+    prisma.pdfEditionAd.update({
+      where: { id },
+      data: { priority: targetIndex },
+    }),
+    prisma.pdfEditionAd.update({
+      where: { id: neighbourId },
+      data: { priority: currentIndex },
+    }),
+  ]);
+
   revalidatePath(`/admin/pdf/editions/${editionId}/ads`);
 }
