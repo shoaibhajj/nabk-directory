@@ -48,16 +48,28 @@ export async function getAvailableAds(_editionId: string) {
 
 // ─── Write ───────────────────────────────────────────────────────────────────
 
+/**
+ * Adds an ad to an edition.
+ * Multiple entries of the same ad are intentionally allowed — each row is
+ * independent with its own priority / pageNumbers / overridePlacement.
+ * The table has NO @@unique([editionId, adId]) so plain `create` is safe.
+ * If the schema ever adds that constraint, replace with createMany + skipDuplicates.
+ */
 export async function addAdToEdition(editionId: string, adId: string) {
   await requireAdmin();
+
+  if (!adId || !editionId) return;
+
   const max = await prisma.pdfEditionAd.aggregate({
     where: { editionId },
     _max: { priority: true },
   });
   const nextPriority = (max._max.priority ?? -1) + 1;
+
   await prisma.pdfEditionAd.create({
     data: { editionId, adId, priority: nextPriority },
   });
+
   revalidatePath(`/admin/pdf/editions/${editionId}/ads`);
 }
 

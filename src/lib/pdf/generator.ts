@@ -24,6 +24,8 @@
  * ✔ Fix: adHalfBlock wrapped in fixed-height View to prevent overflow
  * ✔ Fix: adBannerBlock uses fixed height wrapper to constrain banner image
  * ✔ Fix: guard undefined ad picks in all floating round-robin loops
+ * ✔ Fix: adAllowedInSection coerces pageNumbers to Number (guards Int[] → string via JSON)
+ * ✔ Fix: round-robin counters advance unconditionally so ads rotate across ALL sections
  */
 
 import React from "react";
@@ -593,10 +595,13 @@ function isInlinePlacement(placement: string): boolean {
  * Returns true if this ad is allowed to appear in the given section index.
  * - Empty pageNumbers array → show in ALL sections.
  * - Non-empty array → only show when sectionIdx is in the array.
+ *
+ * FIX: coerce each entry to Number() to guard against JSON serialisation
+ * turning Int[] into string[] when data crosses a Server Action boundary.
  */
 function adAllowedInSection(ad: PdfAdData, sectionIdx: number): boolean {
   if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
-  return ad.pageNumbers.includes(sectionIdx);
+  return ad.pageNumbers.map(Number).includes(sectionIdx);
 }
 
 // ── Resolved image cache ──────────────────────────────────────────────────────────────────
@@ -604,10 +609,10 @@ type ImageCache = Map<string, string | null>;
 
 const AD_IMAGE_SIZES: Record<string, { w: number; h: number }> = {
   FULL_PAGE:        { w: 595,           h: 842 },
-  HALF_PAGE_TOP:    { w: PAGE_INNER_W,  h: 360 },
-  HALF_PAGE_BOTTOM: { w: PAGE_INNER_W,  h: 360 },
-  HEADER_BANNER:    { w: PAGE_INNER_W,  h: 160 },
-  FOOTER_BANNER:    { w: PAGE_INNER_W,  h: 160 },
+  HALF_PAGE_TOP:    { w: PAGE_INNER_W,  h: 180 },
+  HALF_PAGE_BOTTOM: { w: PAGE_INNER_W,  h: 180 },
+  HEADER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
+  FOOTER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
   SIDEBAR_LEFT:     { w: SIDEBAR_W * 2, h: 400 },
   SIDEBAR_RIGHT:    { w: SIDEBAR_W * 2, h: 400 },
   CATEGORY_SPONSOR: { w: 120,           h: 40  },
@@ -1155,12 +1160,12 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   }
 
-  // Floating counters — true round-robin per section
-  let floatSIdx    = 0;
-  let floatIIdx    = 0;
-  let floatHTIdx   = 0;
-  let floatHBIdx   = 0;
-  let floatSBStart = 0;
+  // ── Floating counters — true round-robin, advance unconditionally
+  let floatSIdx    = 0;  // FULL_PAGE standalone
+  let floatIIdx    = 0;  // HEADER/FOOTER/SPONSOR inline
+  let floatHTIdx   = 0;  // HALF_PAGE_TOP
+  let floatHBIdx   = 0;  // HALF_PAGE_BOTTOM
+  let floatSBStart = 0;  // SIDEBAR start pointer
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
@@ -1200,17 +1205,16 @@ async function buildDocument(input: PdfDocumentInput) {
       const ad = pinnedInline.get(section.categoryId)!;
       if (adAllowedInSection(ad, idx)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
-      for (let i = 0; i < floatingInline.length; i++) {
-        const candidate = floatingInline[(floatIIdx + i) % floatingInline.length];
-        if (candidate && adAllowedInSection(candidate, idx)) {
-          sectionInlineAd = candidate;
-          floatIIdx = (floatIIdx + i + 1) % floatingInline.length;
-          break;
-        }
+      // Advance unconditionally so next section gets the next ad
+      const startIdx = floatIIdx;
+      floatIIdx = (floatIIdx + 1) % floatingInline.length;
+      const candidate = floatingInline[startIdx];
+      if (candidate && adAllowedInSection(candidate, idx)) {
+        sectionInlineAd = candidate;
       }
     }
 
-    // ─ Sidebar ads — true round-robin across ALL sections
+    // ─ Sidebar ads — true round-robin, advance pointer every section
     let activeSidebarAds: PdfAdData[] = [];
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
@@ -1218,41 +1222,42 @@ async function buildDocument(input: PdfDocumentInput) {
         .filter((ad) => adAllowedInSection(ad, idx));
     } else if (floatingSidebar.length > 0) {
       const maxSidebarAds = 3;
+      const total = floatingSidebar.length;
       const collected: PdfAdData[] = [];
-      for (let i = 0; i < floatingSidebar.length && collected.length < maxSidebarAds; i++) {
-        const candidate = floatingSidebar[(floatSBStart + i) % floatingSidebar.length];
+      for (let i = 0; i < total && collected.length < maxSidebarAds; i++) {
+        const candidate = floatingSidebar[(floatSBStart + i) % total];
         if (candidate && adAllowedInSection(candidate, idx)) {
           collected.push(candidate);
         }
       }
       activeSidebarAds = collected;
-      // Advance start pointer by 1 each section so each section gets different ads
-      floatSBStart = (floatSBStart + 1) % floatingSidebar.length;
+      // Always advance — regardless of pageNumbers filter result
+      floatSBStart = (floatSBStart + 1) % total;
     }
 
-    // ─ Half-page top
+    // ─ Half-page top — advance unconditionally every other section
     let halfTopAd: PdfAdData | null = null;
     if (pinnedHalfTop.has(section.categoryId)) {
       const ad = pinnedHalfTop.get(section.categoryId)!;
       if (adAllowedInSection(ad, idx)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0 && idx % 2 === 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
+      floatHTIdx++; // advance unconditionally
       if (candidate && adAllowedInSection(candidate, idx)) {
         halfTopAd = candidate;
-        floatHTIdx++;
       }
     }
 
-    // ─ Half-page bottom
+    // ─ Half-page bottom — advance unconditionally every other section
     let halfBottomAd: PdfAdData | null = null;
     if (pinnedHalfBottom.has(section.categoryId)) {
       const ad = pinnedHalfBottom.get(section.categoryId)!;
       if (adAllowedInSection(ad, idx)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0 && idx % 2 === 1) {
       const candidate = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
+      floatHBIdx++; // advance unconditionally
       if (candidate && adAllowedInSection(candidate, idx)) {
         halfBottomAd = candidate;
-        floatHBIdx++;
       }
     }
 
@@ -1286,15 +1291,17 @@ async function buildDocument(input: PdfDocumentInput) {
       }
     }
 
-    // ─ Floating FULL_PAGE ads — every 2 sections, skip if pinned shown
+    // ─ Floating FULL_PAGE ads — every 2 sections
+    // Advance floatSIdx unconditionally so rotation continues even when
+    // pageNumbers restricts the ad from appearing in this section.
     if (
       floatingStandalone.length > 0 &&
       (idx + 1) % 2 === 0 &&
       pinnedHere.length === 0
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
+      floatSIdx++; // always advance
       if (ad && adAllowedInSection(ad, idx)) {
-        floatSIdx++;
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-float-${idx}`,

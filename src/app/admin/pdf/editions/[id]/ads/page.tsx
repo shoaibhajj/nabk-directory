@@ -54,6 +54,10 @@ export default async function EditionAdsPage({
 
   const orderedIds = editionAds.map((ea) => ea.id);
 
+  // Key derived from count so React remounts the <select> after every
+  // successful addition — fixes stale defaultValue in Server Component.
+  const addFormKey = `add-form-${editionAds.length}`;
+
   return (
     <main className="container mx-auto px-4 py-8" dir="rtl">
       {/* ── Header ── */}
@@ -83,7 +87,9 @@ export default async function EditionAdsPage({
             لا توجد إعلانات نشطة في المكتبة.
           </p>
         ) : (
+          // key forces full remount after submission so defaultValue resets
           <form
+            key={addFormKey}
             action={async (formData: FormData) => {
               "use server";
               const adId = formData.get("adId") as string;
