@@ -302,10 +302,13 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       height: "100%",
       objectFit: "contain",
     },
+    // ── FIX: adHalfBlock now has explicit height + overflow hidden
+    //    prevents image from expanding beyond the allocated space
     adHalfBlock: {
       width: "100%",
       height: 180,
       maxHeight: 180,
+      overflow: "hidden",
       objectFit: "contain",
     },
     adSidebarCol: {
@@ -322,8 +325,8 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
     },
     adSidebarImg: {
       width: "100%",
-      height: 200,
-      maxHeight: 200,
+      height: 160,
+      maxHeight: 160,
       objectFit: "contain",
     },
     adSidebarText: {
@@ -335,18 +338,20 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       flexShrink: 0,
     },
+    // ── FIX: adBannerBlock wraps image with fixed height + overflow hidden
     adBannerBlock: {
       width: "100%",
       height: 80,
+      maxHeight: 80,
+      overflow: "hidden",
       backgroundColor: theme.sectionBgColor,
       borderRadius: 4,
-      overflow: "hidden",
       marginBottom: 6,
     },
     adBannerImg: {
       width: "100%",
       height: 80,
-      objectFit: "contain",
+      objectFit: "cover",
     },
     adBannerText: {
       fontFamily: "Cairo",
@@ -626,11 +631,14 @@ function AdBannerElement({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  const content = dataUri
-    ? React.createElement(View, { style: styles.adBannerBlock },
-        React.createElement(Image, { src: dataUri, style: styles.adBannerImg }))
-    : React.createElement(View, { style: styles.adBannerBlock },
-        React.createElement(Text, { style: styles.adBannerText }, ad.titleAr));
+  // FIX: wrap in View with fixed height so image never bleeds outside 80pt
+  const content = React.createElement(
+    View,
+    { style: styles.adBannerBlock },
+    dataUri
+      ? React.createElement(Image, { src: dataUri, style: styles.adBannerImg })
+      : React.createElement(Text, { style: styles.adBannerText }, ad.titleAr)
+  );
   return wrapWithLink(href, content, { width: "100%" });
 }
 
@@ -674,8 +682,13 @@ function AdHalfPageBlock({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
+  // FIX: wrap image in View with maxHeight so it never inflates the page
   const imageNode = dataUri
-    ? React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
+    ? React.createElement(
+        View,
+        { style: { width: "100%", height: 180, maxHeight: 180, overflow: "hidden" } },
+        React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
+      )
     : React.createElement(View, { style: [styles.adTextCard, { height: 180 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
         React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr));
@@ -1058,8 +1071,7 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
-  // ── Pre-process ad images
-  // Phase 5: filter inactive ads first (data-loader already filters, but be safe)
+  // ── Phase 5: filter inactive ads (data-loader already filters, double-check here)
   const activeAds = input.ads.filter((a) => a.isActive !== false);
   const imageCache = await buildImageCache(activeAds);
 
@@ -1072,7 +1084,7 @@ async function buildDocument(input: PdfDocumentInput) {
     .filter((a) => isInlinePlacement(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
 
-  // ── Pinned standalone ads
+  // ── Pinned standalone ads (positionAfterCategoryId set)
   const pinnedStandalone = new Map<string, PdfAdData[]>();
   const floatingStandalone: PdfAdData[] = [];
 
@@ -1123,11 +1135,13 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   }
 
-  let floatSIdx  = 0;
-  let floatIIdx  = 0;
-  let floatSBIdx = 0;
-  let floatHTIdx = 0;
-  let floatHBIdx = 0;
+  // Floating counters — true round-robin per section
+  let floatSIdx  = 0; // FULL_PAGE standalone
+  let floatIIdx  = 0; // HEADER/FOOTER/SPONSOR
+  let floatHTIdx = 0; // HALF_PAGE_TOP
+  let floatHBIdx = 0; // HALF_PAGE_BOTTOM
+  // FIX: sidebar uses a window-start pointer; advances by 1 each section
+  let floatSBStart = 0;
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
@@ -1163,13 +1177,11 @@ async function buildDocument(input: PdfDocumentInput) {
     );
 
     // ─ Inline ad (HEADER_BANNER / FOOTER_BANNER / CATEGORY_SPONSOR)
-    // Phase 5: check adAllowedInSection before assigning
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       const ad = pinnedInline.get(section.categoryId)!;
       if (adAllowedInSection(ad, idx)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
-      // Find next floating inline ad that is allowed in this section
       for (let i = 0; i < floatingInline.length; i++) {
         const candidate = floatingInline[(floatIIdx + i) % floatingInline.length];
         if (adAllowedInSection(candidate, idx)) {
@@ -1181,6 +1193,8 @@ async function buildDocument(input: PdfDocumentInput) {
     }
 
     // ─ Sidebar ads
+    // FIX: true round-robin — each section starts from a different offset
+    // and collects up to maxSidebarAds allowed ads.
     let activeSidebarAds: PdfAdData[] = [];
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
@@ -1188,12 +1202,16 @@ async function buildDocument(input: PdfDocumentInput) {
         .filter((ad) => adAllowedInSection(ad, idx));
     } else if (floatingSidebar.length > 0) {
       const maxSidebarAds = 3;
-      const take = Math.min(maxSidebarAds, floatingSidebar.length);
-      for (let i = 0; i < take; i++) {
-        const candidate = floatingSidebar[(floatSBIdx + i) % floatingSidebar.length];
-        if (adAllowedInSection(candidate, idx)) activeSidebarAds.push(candidate);
+      const collected: PdfAdData[] = [];
+      for (let i = 0; i < floatingSidebar.length && collected.length < maxSidebarAds; i++) {
+        const candidate = floatingSidebar[(floatSBStart + i) % floatingSidebar.length];
+        if (adAllowedInSection(candidate, idx)) {
+          collected.push(candidate);
+        }
       }
-      floatSBIdx = (floatSBIdx + 1) % floatingSidebar.length;
+      activeSidebarAds = collected;
+      // Advance start pointer so next section gets a different first ad
+      floatSBStart = (floatSBStart + 1) % floatingSidebar.length;
     }
 
     // ─ Half-page top
@@ -1253,9 +1271,10 @@ async function buildDocument(input: PdfDocumentInput) {
       }
     }
 
+    // FIX: floating FULL_PAGE ads — every 2 sections (not 3), skip if pinned ad shown
     if (
       floatingStandalone.length > 0 &&
-      (idx + 1) % 3 === 0 &&
+      (idx + 1) % 2 === 0 &&
       pinnedHere.length === 0
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
