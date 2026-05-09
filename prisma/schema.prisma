@@ -473,14 +473,32 @@ model PdfAd {
 }
 
 model PdfEditionAd {
-  id        String     @id @default(cuid())
+  id        String   @id @default(cuid())
   editionId String
   adId      String
-  createdAt DateTime   @default(now())
-  ad        PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  edition   PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// ترتيب ظهور الإعلان داخل الإصدار (صغير = أول)
+  priority Int @default(0)
+
+  /// تفعيل/تعطيل هذا الإعلان في هذا الإصدار تحديداً
+  isActive Boolean @default(true)
+
+  /// تجاوز نوع الموضع المحدد في PdfAd (null = استخدم الموضع الأصلي للإعلان)
+  overridePlacement PdfAdPlacementType?
+
+  /// أرقام الصفحات التي يظهر فيها الإعلان — [] تعني "كل الصفحات"
+  pageNumbers Int[] @default([])
+
+  /// ملاحظات المسؤول (سبب التعطيل، تعليمات خاصة، إلخ)
+  notes String?
+
+  ad      PdfAd      @relation(fields: [adId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  edition PdfEdition @relation(fields: [editionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([editionId, adId])
+  @@index([editionId, priority])
   @@map("pdf_edition_ads")
 }
 
@@ -664,6 +682,9 @@ enum AuditAction {
   PDF_DEVELOPER_PROFILE_UPDATED
   PDF_AD_ACTIVATED
   PDF_AD_DEACTIVATED
+  PDF_EDITION_AD_ADDED
+  PDF_EDITION_AD_REMOVED
+  PDF_EDITION_AD_UPDATED
 }
 
 enum PdfLegacyOpenMode {
