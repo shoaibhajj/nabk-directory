@@ -23,6 +23,7 @@
  * ✔ Fix: Business logo (media_files image) removed from card entirely
  * ✔ Fix: adHalfBlock wrapped in fixed-height View to prevent overflow
  * ✔ Fix: adBannerBlock uses fixed height wrapper to constrain banner image
+ * ✔ Fix: guard undefined ad picks in all floating round-robin loops
  */
 
 import React from "react";
@@ -1201,7 +1202,7 @@ async function buildDocument(input: PdfDocumentInput) {
     } else if (floatingInline.length > 0) {
       for (let i = 0; i < floatingInline.length; i++) {
         const candidate = floatingInline[(floatIIdx + i) % floatingInline.length];
-        if (adAllowedInSection(candidate, idx)) {
+        if (candidate && adAllowedInSection(candidate, idx)) {
           sectionInlineAd = candidate;
           floatIIdx = (floatIIdx + i + 1) % floatingInline.length;
           break;
@@ -1209,7 +1210,7 @@ async function buildDocument(input: PdfDocumentInput) {
       }
     }
 
-    // ─ Sidebar ads — true round-robin
+    // ─ Sidebar ads — true round-robin across ALL sections
     let activeSidebarAds: PdfAdData[] = [];
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
@@ -1220,11 +1221,12 @@ async function buildDocument(input: PdfDocumentInput) {
       const collected: PdfAdData[] = [];
       for (let i = 0; i < floatingSidebar.length && collected.length < maxSidebarAds; i++) {
         const candidate = floatingSidebar[(floatSBStart + i) % floatingSidebar.length];
-        if (adAllowedInSection(candidate, idx)) {
+        if (candidate && adAllowedInSection(candidate, idx)) {
           collected.push(candidate);
         }
       }
       activeSidebarAds = collected;
+      // Advance start pointer by 1 each section so each section gets different ads
       floatSBStart = (floatSBStart + 1) % floatingSidebar.length;
     }
 
@@ -1235,7 +1237,7 @@ async function buildDocument(input: PdfDocumentInput) {
       if (adAllowedInSection(ad, idx)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0 && idx % 2 === 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
-      if (adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedInSection(candidate, idx)) {
         halfTopAd = candidate;
         floatHTIdx++;
       }
@@ -1248,7 +1250,7 @@ async function buildDocument(input: PdfDocumentInput) {
       if (adAllowedInSection(ad, idx)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0 && idx % 2 === 1) {
       const candidate = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
-      if (adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedInSection(candidate, idx)) {
         halfBottomAd = candidate;
         floatHBIdx++;
       }
@@ -1273,7 +1275,7 @@ async function buildDocument(input: PdfDocumentInput) {
     // ─ Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
-      if (adAllowedInSection(ad, idx)) {
+      if (ad && adAllowedInSection(ad, idx)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-pinned-${ad.id}`,
@@ -1291,7 +1293,7 @@ async function buildDocument(input: PdfDocumentInput) {
       pinnedHere.length === 0
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
-      if (adAllowedInSection(ad, idx)) {
+      if (ad && adAllowedInSection(ad, idx)) {
         floatSIdx++;
         pages.push(
           React.createElement(StandaloneAdPage, {
@@ -1333,7 +1335,13 @@ export async function generatePdf(
   try {
     const doc = await buildDocument(input);
     const instance = pdf(doc);
-    const blob = await instance.toBlob();
+    let blob: Blob;
+    try {
+      blob = await instance.toBlob();
+    } catch (renderErr) {
+      console.error("[generator] @react-pdf render failed:", renderErr);
+      return { ok: false, error: `PDF render error: ${String(renderErr)}` };
+    }
     const buffer = Buffer.from(await blob.arrayBuffer());
     const pagesCount = pages_count(doc);
     return {
