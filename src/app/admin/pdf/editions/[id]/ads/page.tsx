@@ -52,7 +52,6 @@ export default async function EditionAdsPage({
     getAvailableAds(editionId),
   ]);
 
-  // Ordered IDs for move actions
   const orderedIds = editionAds.map((ea) => ea.id);
 
   return (
@@ -75,10 +74,13 @@ export default async function EditionAdsPage({
       {/* القسم B — إضافة إعلان                                            */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <section className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
-        <h2 className="mb-3 text-base font-semibold">➕ إضافة إعلان للإصدار</h2>
+        <h2 className="mb-1 text-base font-semibold">➕ إضافة إعلان للإصدار</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          يمكنك إضافة نفس الإعلان أكثر من مرة — كل إضافة مستقلة بصفحاتها وموضعها.
+        </p>
         {availableAds.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            جميع الإعلانات النشطة مضافة بالفعل لهذا الإصدار.
+            لا توجد إعلانات نشطة في المكتبة.
           </p>
         ) : (
           <form
@@ -248,14 +250,12 @@ export default async function EditionAdsPage({
                         <form
                           action={async (fd: FormData) => {
                             "use server";
-                            const raw = (
-                              fd.get("pageNumbers") as string
-                            ).trim();
+                            const raw = (fd.get("pageNumbers") as string ?? "").trim();
                             const pages = raw
                               ? raw
                                   .split(",")
                                   .map((s) => parseInt(s.trim(), 10))
-                                  .filter((n) => !isNaN(n))
+                                  .filter((n) => !isNaN(n) && n >= 0)
                               : [];
                             await updateEditionAd(ea.id, editionId, {
                               pageNumbers: pages,
@@ -279,14 +279,14 @@ export default async function EditionAdsPage({
                         </form>
                       </td>
 
-                      {/* ── Priority (manual number) ── */}
+                      {/* ── Priority ── */}
                       <td className="px-3 py-3">
                         <form
                           action={async (fd: FormData) => {
                             "use server";
                             const v = Number(fd.get("priority"));
                             await updateEditionAd(ea.id, editionId, {
-                              priority: v,
+                              priority: isNaN(v) ? 0 : v,
                             });
                           }}
                           className="flex gap-1"
@@ -312,11 +312,7 @@ export default async function EditionAdsPage({
                         <form
                           action={async () => {
                             "use server";
-                            await toggleEditionAd(
-                              ea.id,
-                              editionId,
-                              !ea.isActive
-                            );
+                            await toggleEditionAd(ea.id, editionId, !ea.isActive);
                           }}
                         >
                           <button

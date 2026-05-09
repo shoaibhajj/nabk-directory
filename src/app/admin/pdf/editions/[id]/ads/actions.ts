@@ -28,15 +28,14 @@ export async function getEditionAds(editionId: string) {
   });
 }
 
-export async function getAvailableAds(editionId: string) {
+/**
+ * Returns ALL active ads — even ones already added to this edition.
+ * A single ad can appear multiple times in an edition (different pages/placements).
+ */
+export async function getAvailableAds(_editionId: string) {
   await requireAdmin();
-  const already = await prisma.pdfEditionAd.findMany({
-    where: { editionId },
-    select: { adId: true },
-  });
-  const usedIds = already.map((r) => r.adId);
   return prisma.pdfAd.findMany({
-    where: { id: { notIn: usedIds }, isActive: true },
+    where: { isActive: true },
     orderBy: { titleAr: "asc" },
     select: {
       id: true,
@@ -130,7 +129,6 @@ export async function moveEditionAd(
 
   const neighbourId = allIds[targetIndex];
 
-  // Swap priorities
   await prisma.$transaction([
     prisma.pdfEditionAd.update({
       where: { id },

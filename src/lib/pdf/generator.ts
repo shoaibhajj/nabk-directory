@@ -19,7 +19,10 @@
  *   - pageNumbers: if non-empty, ad only appears in sections whose index is
  *     in the pageNumbers array; empty = show in all sections (round-robin)
  * ✔ Fix: QR code is now a clickable Link → business.publicUrl
+ * ✔ Fix: QR image positioned on the LEFT side of the business card (RTL)
  * ✔ Fix: Business logo (media_files image) removed from card entirely
+ * ✔ Fix: adHalfBlock wrapped in fixed-height View to prevent overflow
+ * ✔ Fix: adBannerBlock uses fixed height wrapper to constrain banner image
  */
 
 import React from "react";
@@ -282,6 +285,7 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginBottom: 6,
       backgroundColor: theme.bgColor,
     },
+    // RTL layout: info on RIGHT, QR on LEFT
     qrContainer: {
       display: "flex",
       flexDirection: "row",
@@ -298,17 +302,22 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       lineHeight: 1.4,
     },
-    businessInfo: { flex: 1, paddingRight: 8 },
+    // businessInfo takes remaining space on the right (RTL)
+    businessInfo: { flex: 1, paddingLeft: 8 },
     adFullPage: {
       width: "100%",
       height: "100%",
       objectFit: "contain",
     },
+    // Wrapper View constrains height — Image fills inside
+    adHalfWrapper: {
+      width: "100%",
+      height: 180,
+      marginVertical: 8,
+    },
     adHalfBlock: {
       width: "100%",
       height: 180,
-      maxHeight: 180,
-      overflow: "hidden",
       objectFit: "contain",
     },
     adSidebarCol: {
@@ -338,11 +347,20 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       flexShrink: 0,
     },
+    // Banner wrapper constrains height strictly
+    adBannerWrapper: {
+      width: "100%",
+      height: 80,
+      marginBottom: 6,
+      borderRadius: 4,
+      backgroundColor: theme.sectionBgColor,
+      overflow: "hidden" as never,
+    },
     adBannerBlock: {
       width: "100%",
       height: 80,
       maxHeight: 80,
-      overflow: "hidden",
+      overflow: "hidden" as never,
       backgroundColor: theme.sectionBgColor,
       borderRadius: 4,
       marginBottom: 6,
@@ -630,14 +648,15 @@ function AdBannerElement({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  const content = React.createElement(
+  // Wrap in a fixed-height View so the image cannot push content below
+  const inner = React.createElement(
     View,
-    { style: styles.adBannerBlock },
+    { style: styles.adBannerWrapper },
     dataUri
       ? React.createElement(Image, { src: dataUri, style: styles.adBannerImg })
       : React.createElement(Text, { style: styles.adBannerText }, ad.titleAr)
   );
-  return wrapWithLink(href, content, { width: "100%" });
+  return wrapWithLink(href, inner, { width: "100%" });
 }
 
 function AdSidebarElement({
@@ -680,15 +699,19 @@ function AdHalfPageBlock({
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
+  // Fixed-height wrapper prevents image from expanding beyond 180pt
   const imageNode = dataUri
     ? React.createElement(
         View,
-        { style: { width: "100%", height: 180, maxHeight: 180, overflow: "hidden" } },
+        { style: styles.adHalfWrapper },
         React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
       )
-    : React.createElement(View, { style: [styles.adTextCard, { height: 180 }] },
+    : React.createElement(
+        View,
+        { style: [styles.adTextCard, { height: 180 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr));
+        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
+      );
   return React.createElement(
     View, { style: { width: "100%", marginVertical: 8 } },
     wrapWithLink(href, imageNode, { width: "100%" })
@@ -937,7 +960,7 @@ function BusinessCardStandard({
             React.createElement(Text, { style: styles.phoneText }, p.number))))
     : null;
 
-  // QR: clickable link to business public page
+  // QR on the LEFT side (RTL: info flows right→left, QR anchors on left)
   const qrSection = includeQr && qrDataUrl
     ? wrapWithLink(
         business.publicUrl,
@@ -950,11 +973,11 @@ function BusinessCardStandard({
       )
     : null;
 
-  // Logo/business image intentionally removed per design decision
-
   return React.createElement(
     View, { style: styles.businessCard },
+    // row: QR on left, business info on right (RTL natural reading order)
     React.createElement(View, { style: styles.qrContainer },
+      qrSection,
       React.createElement(View, { style: styles.businessInfo },
         React.createElement(Text, { style: styles.businessName }, business.nameAr),
         business.addressAr
@@ -964,8 +987,7 @@ function BusinessCardStandard({
           ? React.createElement(Text, { style: styles.businessDescription }, business.descriptionAr)
           : null,
         phoneSection
-      ),
-      qrSection
+      )
     )
   );
 }
@@ -1068,7 +1090,7 @@ async function buildDocument(input: PdfDocumentInput) {
     );
   }
 
-  // ── Phase 5: filter inactive ads (data-loader already filters, double-check here)
+  // ── Phase 5: filter inactive ads
   const activeAds = input.ads.filter((a) => a.isActive !== false);
   const imageCache = await buildImageCache(activeAds);
 
@@ -1133,16 +1155,15 @@ async function buildDocument(input: PdfDocumentInput) {
   }
 
   // Floating counters — true round-robin per section
-  let floatSIdx  = 0; // FULL_PAGE standalone
-  let floatIIdx  = 0; // HEADER/FOOTER/SPONSOR
-  let floatHTIdx = 0; // HALF_PAGE_TOP
-  let floatHBIdx = 0; // HALF_PAGE_BOTTOM
-  let floatSBStart = 0; // sidebar window-start pointer
+  let floatSIdx    = 0;
+  let floatIIdx    = 0;
+  let floatHTIdx   = 0;
+  let floatHBIdx   = 0;
+  let floatSBStart = 0;
 
   const hasIntro = !!input.introTextAr;
   const pages: React.ReactElement[] = [];
 
-  // ── Assemble pages
   pages.push(React.createElement(CoverPage, { key: "cover", input, styles }));
 
   if (hasIntro) {
@@ -1283,7 +1304,6 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   });
 
-  // ── Profile pages (optional)
   if (input.includeWebsiteProfile && input.websiteProfile) {
     pages.push(
       React.createElement(WebsiteProfilePage, {
