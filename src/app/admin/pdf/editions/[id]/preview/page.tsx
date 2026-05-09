@@ -5,9 +5,8 @@
  * The actual PDF bytes are served by GET /api/pdf/preview-pdf?id=...
  * which streams with Content-Disposition: inline.
  *
- * Why not a Route Handler here?
- * Next.js App Router forbids having both page.tsx and route.ts
- * in the same folder. So the PDF streaming lives in /api/pdf/preview-pdf.
+ * Fix: appends ?t=<timestamp> to the iframe src so the browser never
+ * serves a stale cached PDF after ads are added/changed.
  */
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth-guards";
@@ -29,7 +28,9 @@ export default async function PreviewPage({
   });
   if (!edition) notFound();
 
-  const pdfUrl = `/api/pdf/preview-pdf?id=${id}`;
+  // Append cache-busting timestamp so every page visit forces a fresh PDF
+  const ts = Date.now();
+  const pdfUrl = `/api/pdf/preview-pdf?id=${id}&t=${ts}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", margin: 0, padding: 0 }}>

@@ -7,6 +7,10 @@
  * - Reads overridePlacement, isActive, pageNumbers, priority from PdfEditionAd.
  * - effectivePlacement = overridePlacement ?? ad.placementType
  * - positionAfterCategoryId forwarded from PdfAd (existing field)
+ *
+ * Fix: pageNumbers is stored as Prisma Json — we round-trip through
+ * JSON.stringify / JSON.parse and coerce every entry to Number() so the
+ * value is always a true number[] regardless of how Prisma serialises it.
  */
 
 import { prisma } from "@/lib/prisma";
@@ -51,6 +55,25 @@ function parseRichText(value: string | null | undefined): string {
   } catch {
     return value.replace(/<[^>]+>/g, "").trim();
   }
+}
+
+/**
+ * Safely converts a Prisma Json field that should be number[] into an
+ * actual number[].  Prisma may hand us the value as:
+ *   - already a number[]  (ideal case)
+ *   - a string[]          (JSON serialisation across Server Action boundary)
+ *   - a JSON string       (double-encoded edge case)
+ *   - null / undefined    (column is nullable)
+ */
+function parsePageNumbers(raw: unknown): number[] {
+  if (!raw) return [];
+  // Re-parse if it somehow arrived as a JSON string
+  let value = raw;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return []; }
+  }
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[]).map(Number).filter((n) => !isNaN(n));
 }
 
 export async function loadPdfEditionData(
@@ -213,7 +236,7 @@ export async function loadPdfEditionData(
   //
   // Priority source: PdfEditionAd.priority (set by admin via ↑↓ or manual input)
   // effectivePlacement: overridePlacement if set, otherwise ad.placementType
-  // pageNumbers: which section indices (0-based) this ad appears in; [] = all
+  // pageNumbers: PDF page numbers (1-based) where this ad should appear; [] = all
   // isActive: already filtered in the Prisma query above
   const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
     id: ea.ad.id,
@@ -223,13 +246,14 @@ export async function loadPdfEditionData(
     linkUrl: ea.ad.targetUrl ?? ea.ad.linkUrl ?? null,
     phone: ea.ad.phone ?? null,
     placementType: ea.ad.placementType,
-    priority: ea.priority,                          // from PdfEditionAd
+    priority: ea.priority,
     effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
     positionAfterCategoryId:
       (ea.ad as { positionAfterCategoryId?: string | null })
         .positionAfterCategoryId ?? null,
-    pageNumbers: ea.pageNumbers as number[],        // [] = all sections
-    isActive: ea.isActive,                          // already true (filtered above)
+    // parsePageNumbers guarantees a real number[] regardless of Prisma Json serialisation
+    pageNumbers: parsePageNumbers(ea.pageNumbers),
+    isActive: ea.isActive,
   }));
 
   // ─ 8. Config blobs

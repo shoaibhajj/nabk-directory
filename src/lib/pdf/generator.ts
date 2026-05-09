@@ -16,8 +16,10 @@
  * ✔ Phase 5:
  *   - isActive filter: ads with isActive=false are excluded (already filtered
  *     in data-loader, but double-checked here for safety)
- *   - pageNumbers: if non-empty, ad only appears in sections whose index is
- *     in the pageNumbers array; empty = show in all sections (round-robin)
+ *   - pageNumbers: if non-empty, ad only appears in sections whose PDF content
+ *     page number is in the pageNumbers array; empty = show in all sections
+ *     (round-robin). pageNumbers are 1-based PDF page numbers as shown in the
+ *     document, NOT 0-based section indices.
  * ✔ Fix: QR code is now a clickable Link → business.publicUrl
  * ✔ Fix: QR image positioned on the LEFT side of the business card (RTL)
  * ✔ Fix: Business logo (media_files image) removed from card entirely
@@ -26,6 +28,8 @@
  * ✔ Fix: guard undefined ad picks in all floating round-robin loops
  * ✔ Fix: adAllowedInSection coerces pageNumbers to Number (guards Int[] → string via JSON)
  * ✔ Fix: round-robin counters advance unconditionally so ads rotate across ALL sections
+ * ✔ Fix: pageNumbers now compared against actual PDF page number of the section
+ *         content page, not the 0-based section index
  */
 
 import React from "react";
@@ -592,16 +596,51 @@ function isInlinePlacement(placement: string): boolean {
 }
 
 /**
- * Returns true if this ad is allowed to appear in the given section index.
- * - Empty pageNumbers array → show in ALL sections.
- * - Non-empty array → only show when sectionIdx is in the array.
+ * Returns true if this ad is allowed to appear in the given section.
+ *
+ * pageNumbers stores 1-based PDF page numbers as entered by the admin.
+ * Empty array → show in ALL sections.
+ *
+ * PDF page layout (with intro page):
+ *   1 = Cover
+ *   2 = Intro
+ *   3 = Index
+ *   4 = Divider for section 0
+ *   5 = Content for section 0  ← idx=0
+ *   6 = Divider for section 1
+ *   7 = Content for section 1  ← idx=1
+ *   ...
+ *   contentPageForIdx = hasIntro ? (idx * 2 + 5) : (idx * 2 + 4)
+ *
+ * Without intro page:
+ *   1 = Cover
+ *   2 = Index
+ *   3 = Divider for section 0
+ *   4 = Content for section 0  ← idx=0
+ *   ...
+ *   contentPageForIdx = idx * 2 + 4
+ *
+ * We compare the admin-entered PDF page number against this computed value.
+ * We also accept the section index directly (legacy / 0-based) as a fallback
+ * so existing data keeps working.
  *
  * FIX: coerce each entry to Number() to guard against JSON serialisation
  * turning Int[] into string[] when data crosses a Server Action boundary.
  */
-function adAllowedInSection(ad: PdfAdData, sectionIdx: number): boolean {
+function adAllowedInSection(
+  ad: PdfAdData,
+  sectionIdx: number,
+  hasIntro: boolean
+): boolean {
   if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
-  return ad.pageNumbers.map(Number).includes(sectionIdx);
+  const nums = ad.pageNumbers.map(Number).filter((n) => !isNaN(n));
+  if (nums.length === 0) return true;
+
+  // Compute actual PDF content-page number for this section index
+  const contentPdfPage = hasIntro ? sectionIdx * 2 + 5 : sectionIdx * 2 + 4;
+
+  // Accept either the PDF page number OR the raw section index (0-based legacy)
+  return nums.includes(contentPdfPage) || nums.includes(sectionIdx);
 }
 
 // ── Resolved image cache ──────────────────────────────────────────────────────────────────
@@ -1203,13 +1242,12 @@ async function buildDocument(input: PdfDocumentInput) {
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       const ad = pinnedInline.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) sectionInlineAd = ad;
+      if (adAllowedInSection(ad, idx, hasIntro)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
-      // Advance unconditionally so next section gets the next ad
       const startIdx = floatIIdx;
       floatIIdx = (floatIIdx + 1) % floatingInline.length;
       const candidate = floatingInline[startIdx];
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
         sectionInlineAd = candidate;
       }
     }
@@ -1219,44 +1257,43 @@ async function buildDocument(input: PdfDocumentInput) {
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
         .get(section.categoryId)!
-        .filter((ad) => adAllowedInSection(ad, idx));
+        .filter((ad) => adAllowedInSection(ad, idx, hasIntro));
     } else if (floatingSidebar.length > 0) {
       const maxSidebarAds = 3;
       const total = floatingSidebar.length;
       const collected: PdfAdData[] = [];
       for (let i = 0; i < total && collected.length < maxSidebarAds; i++) {
         const candidate = floatingSidebar[(floatSBStart + i) % total];
-        if (candidate && adAllowedInSection(candidate, idx)) {
+        if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
           collected.push(candidate);
         }
       }
       activeSidebarAds = collected;
-      // Always advance — regardless of pageNumbers filter result
       floatSBStart = (floatSBStart + 1) % total;
     }
 
-    // ─ Half-page top — advance unconditionally every other section
+    // ─ Half-page top
     let halfTopAd: PdfAdData | null = null;
     if (pinnedHalfTop.has(section.categoryId)) {
       const ad = pinnedHalfTop.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) halfTopAd = ad;
+      if (adAllowedInSection(ad, idx, hasIntro)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0 && idx % 2 === 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
-      floatHTIdx++; // advance unconditionally
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      floatHTIdx++;
+      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
         halfTopAd = candidate;
       }
     }
 
-    // ─ Half-page bottom — advance unconditionally every other section
+    // ─ Half-page bottom
     let halfBottomAd: PdfAdData | null = null;
     if (pinnedHalfBottom.has(section.categoryId)) {
       const ad = pinnedHalfBottom.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) halfBottomAd = ad;
+      if (adAllowedInSection(ad, idx, hasIntro)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0 && idx % 2 === 1) {
       const candidate = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
-      floatHBIdx++; // advance unconditionally
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      floatHBIdx++;
+      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
         halfBottomAd = candidate;
       }
     }
@@ -1280,7 +1317,7 @@ async function buildDocument(input: PdfDocumentInput) {
     // ─ Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
-      if (ad && adAllowedInSection(ad, idx)) {
+      if (ad && adAllowedInSection(ad, idx, hasIntro)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-pinned-${ad.id}`,
@@ -1292,16 +1329,14 @@ async function buildDocument(input: PdfDocumentInput) {
     }
 
     // ─ Floating FULL_PAGE ads — every 2 sections
-    // Advance floatSIdx unconditionally so rotation continues even when
-    // pageNumbers restricts the ad from appearing in this section.
     if (
       floatingStandalone.length > 0 &&
       (idx + 1) % 2 === 0 &&
       pinnedHere.length === 0
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
-      floatSIdx++; // always advance
-      if (ad && adAllowedInSection(ad, idx)) {
+      floatSIdx++;
+      if (ad && adAllowedInSection(ad, idx, hasIntro)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-float-${idx}`,
