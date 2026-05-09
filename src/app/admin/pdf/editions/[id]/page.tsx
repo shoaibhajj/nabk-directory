@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { setEditionStatus } from "@/app/actions/pdf-editions";
 import { GeneratePdfButton } from "@/components/admin/pdf/GeneratePdfButton";
+import * as Tabs from "@radix-ui/react-tabs";
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "مسودة", className: "bg-yellow-100 text-yellow-800" },
@@ -27,6 +28,7 @@ export default async function EditionDetailPage({
         orderBy: { createdAt: "desc" },
         take: 5,
       },
+      _count: { select: { editionAds: true } },
     },
   });
 
@@ -91,90 +93,139 @@ export default async function EditionDetailPage({
         </div>
       </div>
 
-      {/* Generate PDF buttons */}
-      <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
-        <h2 className="mb-4 text-lg font-semibold">توليد PDF</h2>
-        <div className="flex flex-wrap gap-3">
-          <GeneratePdfButton editionId={id} isPreview={false} />
-          <GeneratePdfButton editionId={id} isPreview={true} />
-        </div>
-      </div>
+      {/* Tabs */}
+      <Tabs.Root defaultValue="overview" className="w-full">
+        <Tabs.List className="mb-6 flex gap-1 border-b border-border">
+          <Tabs.Trigger
+            value="overview"
+            className="rounded-t-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-foreground"
+          >
+            نظرة عامة
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="ads"
+            className="flex items-center gap-1.5 rounded-t-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-foreground"
+          >
+            الإعلانات
+            {edition._count.editionAds > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
+                {edition._count.editionAds}
+              </span>
+            )}
+          </Tabs.Trigger>
+        </Tabs.List>
 
-      {/* Edition details */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2">
-        <DetailRow label="المسار (slug)" value={edition.slug} dir="ltr" />
-        <DetailRow label="حجم الصفحة" value={edition.pageSize} />
-        <DetailRow
-          label="تضمين كود QR"
-          value={edition.includeQrCodes ? "نعم" : "لا"}
-        />
-        <DetailRow
-          label="الفهرس الأبجدي"
-          value={edition.includeAlphabeticalIndex ? "نعم" : "لا"}
-        />
-        <DetailRow
-          label="بلوك الموقع"
-          value={edition.includeWebsiteProfile ? "نعم" : "لا"}
-        />
-        <DetailRow
-          label="بلوك المطور"
-          value={edition.includeDeveloperProfile ? "نعم" : "لا"}
-        />
-      </div>
-
-      {/* Recent jobs */}
-      {edition.generationJobs.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-lg font-semibold">آخر عمليات التوليد</h2>
-          <div className="overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-secondary/40 text-right">
-                <tr>
-                  <th className="px-4 py-2 font-semibold">التاريخ</th>
-                  <th className="px-4 py-2 font-semibold">الحالة</th>
-                  <th className="px-4 py-2 font-semibold">الصفحات</th>
-                  <th className="px-4 py-2 font-semibold">حجم الملف</th>
-                  <th className="px-4 py-2 font-semibold">رابط</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {edition.generationJobs.map((job) => (
-                  <tr key={job.id} className="hover:bg-secondary/20">
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {job.createdAt.toLocaleDateString("ar-SY")}
-                    </td>
-                    <td className="px-4 py-2">
-                      <JobStatusBadge status={job.status} />
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {job.pagesCount ?? "—"}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {job.fileSizeBytes
-                        ? `${(job.fileSizeBytes / 1024).toFixed(0)} KB`
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {job.outputFileUrl ? (
-                        <a
-                          href={job.outputFileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary underline"
-                        >
-                          تحميل
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Overview tab */}
+        <Tabs.Content value="overview">
+          {/* Generate PDF buttons */}
+          <div className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
+            <h2 className="mb-4 text-lg font-semibold">توليد PDF</h2>
+            <div className="flex flex-wrap gap-3">
+              <GeneratePdfButton editionId={id} isPreview={false} />
+              <GeneratePdfButton editionId={id} isPreview={true} />
+            </div>
           </div>
-        </div>
-      )}
+
+          {/* Edition details */}
+          <div className="mb-8 grid gap-4 sm:grid-cols-2">
+            <DetailRow label="المسار (slug)" value={edition.slug} dir="ltr" />
+            <DetailRow label="حجم الصفحة" value={edition.pageSize} />
+            <DetailRow
+              label="تضمين كود QR"
+              value={edition.includeQrCodes ? "نعم" : "لا"}
+            />
+            <DetailRow
+              label="الفهرس الأبجدي"
+              value={edition.includeAlphabeticalIndex ? "نعم" : "لا"}
+            />
+            <DetailRow
+              label="بلوك الموقع"
+              value={edition.includeWebsiteProfile ? "نعم" : "لا"}
+            />
+            <DetailRow
+              label="بلوك المطور"
+              value={edition.includeDeveloperProfile ? "نعم" : "لا"}
+            />
+          </div>
+
+          {/* Recent jobs */}
+          {edition.generationJobs.length > 0 && (
+            <div>
+              <h2 className="mb-3 text-lg font-semibold">آخر عمليات التوليد</h2>
+              <div className="overflow-hidden rounded-xl border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-secondary/40 text-right">
+                    <tr>
+                      <th className="px-4 py-2 font-semibold">التاريخ</th>
+                      <th className="px-4 py-2 font-semibold">الحالة</th>
+                      <th className="px-4 py-2 font-semibold">الصفحات</th>
+                      <th className="px-4 py-2 font-semibold">حجم الملف</th>
+                      <th className="px-4 py-2 font-semibold">رابط</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {edition.generationJobs.map((job) => (
+                      <tr key={job.id} className="hover:bg-secondary/20">
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {job.createdAt.toLocaleDateString("ar-SY")}
+                        </td>
+                        <td className="px-4 py-2">
+                          <JobStatusBadge status={job.status} />
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {job.pagesCount ?? "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {job.fileSizeBytes
+                            ? `${(job.fileSizeBytes / 1024).toFixed(0)} KB`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {job.outputFileUrl ? (
+                            <a
+                              href={job.outputFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline"
+                            >
+                              تحميل
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Tabs.Content>
+
+        {/* Ads tab */}
+        <Tabs.Content value="ads">
+          <div className="rounded-xl border border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
+            <p>
+              لإدارة إعلانات هذا الإصدار بشكل كامل، اذهب إلى{" "}
+              <Link
+                href={`/admin/pdf/editions/${id}/ads`}
+                className="font-semibold text-primary underline hover:text-primary/80"
+              >
+                صفحة إدارة الإعلانات
+              </Link>
+              {" "}حيث يمكنك إضافة الإعلانات وتحديد مواضعها وصفحاتها وأولوياتها.
+            </p>
+            {edition._count.editionAds === 0 ? (
+              <p className="mt-3 font-medium text-foreground">لا توجد إعلانات مضافة بعد.</p>
+            ) : (
+              <p className="mt-3 font-medium text-foreground">
+                يوجد {edition._count.editionAds} إعلان مضاف لهذا الإصدار.
+              </p>
+            )}
+          </div>
+        </Tabs.Content>
+      </Tabs.Root>
     </main>
   );
 }
