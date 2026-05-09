@@ -3,8 +3,8 @@
  *
  * Accepts { editionId, isPreview? } in the JSON body.
  * Generates the PDF, records a PdfGenerationJob, and:
- *   - On success: returns the PDF as application/pdf
- *   - On failure: returns JSON { error }
+ *   - isPreview=false → Content-Disposition: attachment (download)
+ *   - isPreview=true  → Content-Disposition: inline (opens in browser tab)
  *
  * Auth: ADMIN or SUPER_ADMIN only.
  */
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "editionId مطلوب" }, { status: 400 });
   }
 
-  // Create job record using only fields that exist in the schema
+  // Create job record
   const job = await prisma.pdfGenerationJob.create({
     data: {
       editionId,
@@ -73,7 +73,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    // Update job — only use fields defined in schema
     await prisma.pdfGenerationJob.update({
       where: { id: job.id },
       data: {
@@ -104,13 +103,18 @@ export async function POST(req: NextRequest) {
       ? `preview-${input.editionSlug}.pdf`
       : `${input.editionSlug}.pdf`;
 
-    // Cast Buffer → Uint8Array so TypeScript accepts it as BodyInit
+    // isPreview → inline (opens in browser); final → attachment (download)
+    const disposition = isPreview
+      ? `inline; filename="${filename}"`
+      : `attachment; filename="${filename}"`;
+
     return new NextResponse(new Uint8Array(result.buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": disposition,
         "Content-Length": String(result.buffer.length),
+        ...(isPreview ? { "Cache-Control": "no-store" } : {}),
       },
     });
   } catch (err) {

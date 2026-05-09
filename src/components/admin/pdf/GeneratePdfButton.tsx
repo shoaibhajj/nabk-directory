@@ -8,8 +8,12 @@ interface Props {
 }
 
 /**
- * Client Component: hits POST /api/pdf/generate and triggers browser download.
- * Shows loading state while the server is generating the PDF.
+ * Client Component: hits POST /api/pdf/generate.
+ *
+ * - isPreview=false → triggers file download (attachment)
+ * - isPreview=true  → opens PDF in a new browser tab (inline)
+ *
+ * Shows loading state while the server is generating.
  */
 export function GeneratePdfButton({ editionId, isPreview }: Props) {
   const [loading, setLoading] = useState(false);
@@ -32,16 +36,22 @@ export function GeneratePdfButton({ editionId, isPreview }: Props) {
         return;
       }
 
-      // Trigger download
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = isPreview
-        ? `preview-${editionId}.pdf`
-        : `edition-${editionId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+
+      if (isPreview) {
+        // Open inline in a new tab so the user sees the PDF in the browser
+        window.open(url, "_blank", "noopener,noreferrer");
+        // Revoke after a short delay to allow the tab to load
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else {
+        // Trigger download for the final PDF
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `edition-${editionId}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "خطأ في الاتصال");
     } finally {
@@ -59,7 +69,7 @@ export function GeneratePdfButton({ editionId, isPreview }: Props) {
         {loading ? (
           <>
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            {"جاري التوليد…"}
+            {isPreview ? "جاري توليد المعاينة…" : "جاري التوليد…"}
           </>
         ) : isPreview ? (
           "👁️ توليد معاينة"
