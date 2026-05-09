@@ -39,8 +39,10 @@ export default async function PreviewPage({
     redirect(`/admin/pdf/editions/${id}/ads?error=${encodeURIComponent(result.error)}`);
   }
 
-  // Stream the PDF bytes back as an inline PDF response.
-  // Next.js App Router supports returning a Response from a page when
-  // using route handlers; for a Server Component we use a Route Handler
-  // instead. However, since this must be a page route (for the Link href
-  // to work), we redirect to a route hand
+    // Stream the PDF bytes back as an inline PDF response.
+    // Next.js App Router supports returning a Response from a page when
+    // using route handlers; for a Server Component we use a Route Handler
+    // instead. However, since this must be a page route (for the Link href
+    // to work), we redirect to a route handler that streams the PDF.
+    redirect(`/admin/pdf/editions/${id}/preview/route?isPreview=true`);
+  }

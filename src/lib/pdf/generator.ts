@@ -1341,7 +1341,8 @@ export async function generatePdf(
 
 /** Count top-level Page elements in the document tree. */
 function pages_count(doc: React.ReactElement): number {
-  const children = doc.props?.children;
+  // React.ReactElement's props may be typed as {} — cast to any to safely access children
+  const children = (doc as any)?.props?.children;
   if (!children) return 0;
   const arr = Array.isArray(children) ? children : [children];
   return arr.filter(
