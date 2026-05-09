@@ -13,7 +13,10 @@ import type {
   SocialPlatform,
 } from "@prisma/client";
 
-// ── Edition ─────────────────────────────────────────────────────────────────
+// Silence unused-import warning for PdfEditionStatus (kept for consumers)
+void (0 as unknown as PdfEditionStatus);
+
+// ── Edition ───────────────────────────────────────────────────────────────────
 
 export interface PdfTheme {
   primaryColor: string;   // e.g. "#01696f"
@@ -64,7 +67,7 @@ export const DEFAULT_LAYOUT: PdfLayoutConfig = {
   showFooterLine: true,
 };
 
-// ── Business data ──────────────────────────────────────────────────────────
+// ── Business data ──────────────────────────────────────────────────────
 
 export interface PdfPhoneNumber {
   label: PhoneLabel;
@@ -94,7 +97,7 @@ export interface PdfBusiness {
   publicUrl: string;
 }
 
-// ── Category section ──────────────────────────────────────────────────────────
+// ── Category section ──────────────────────────────────────────────────────
 
 export interface PdfCategorySection {
   categoryId: string;
@@ -111,7 +114,7 @@ export interface PdfCategorySection {
   businesses: PdfBusiness[];
 }
 
-// ── Ads ─────────────────────────────────────────────────────────────────────
+// ── Ads ───────────────────────────────────────────────────────────────────────
 
 export interface PdfAdData {
   id: string;
@@ -128,13 +131,25 @@ export interface PdfAdData {
   effectivePlacement: PdfAdPlacementType;
   /**
    * Optional category ID — when provided, the generator pins this ad
-   * immediately after that category's section pages instead of
+   * immediately after that category’s section pages instead of
    * distributing it round-robin. Maps to PdfAd.position_after_category_id.
    */
   positionAfterCategoryId?: string | null;
+  /**
+   * Specific section indices (0-based) where this ad should appear.
+   * Empty array = show in every section (round-robin).
+   * Populated from PdfEditionAd.pageNumbers.
+   */
+  pageNumbers: number[];
+  /**
+   * Whether this ad is active for this edition.
+   * Inactive ads are excluded from the generated PDF entirely.
+   * Maps to PdfEditionAd.isActive.
+   */
+  isActive: boolean;
 }
 
-// ── Profile blocks ──────────────────────────────────────────────────────────
+// ── Profile blocks ────────────────────────────────────────────────────────
 
 export interface PdfWebsiteProfile {
   titleAr: string;
@@ -159,7 +174,7 @@ export interface PdfDeveloperProfile {
   ctaTextAr?: string | null;
 }
 
-// ── Main document input ─────────────────────────────────────────────────────────
+// ── Main document input ──────────────────────────────────────────────────────────
 
 export interface PdfDocumentInput {
   // Edition metadata

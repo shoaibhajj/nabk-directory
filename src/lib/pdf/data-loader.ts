@@ -1,5 +1,12 @@
 /**
  * Loads all data needed for PDF generation from the database.
+ *
+ * Phase 5 changes:
+ * - ads array now contains ONLY PdfEditionAd entries (no allActiveAds fallback).
+ *   Zero edition ads = zero ads in the PDF. This gives admins full control.
+ * - Reads overridePlacement, isActive, pageNumbers, priority from PdfEditionAd.
+ * - effectivePlacement = overridePlacement ?? ad.placementType
+ * - positionAfterCategoryId forwarded from PdfAd (existing field)
  */
 
 import { prisma } from "@/lib/prisma";
@@ -50,7 +57,7 @@ export async function loadPdfEditionData(
   editionId: string,
   isPreview = false
 ): Promise<PdfDocumentInput> {
-  // ─ 1. Load edition — use relation names from actual schema
+  // ─ 1. Load edition
   const edition = await prisma.pdfEdition.findUniqueOrThrow({
     where: { id: editionId },
     include: {
@@ -60,8 +67,25 @@ export async function loadPdfEditionData(
         include: { category: true },
       },
       editionAds: {
-        where: { ad: { isActive: true } },
-        include: { ad: true },
+        // Only active edition-ad entries; the underlying PdfAd.isActive is
+        // also checked so we never embed a globally-disabled ad.
+        where: { isActive: true, ad: { isActive: true } },
+        orderBy: { priority: "asc" },
+        include: {
+          ad: {
+            select: {
+              id: true,
+              titleAr: true,
+              titleEn: true,
+              imageUrl: true,
+              placementType: true,
+              targetUrl: true,
+              linkUrl: true,
+              phone: true,
+              positionAfterCategoryId: true,
+            },
+          },
+        },
       },
     },
   });
@@ -165,7 +189,6 @@ export async function loadPdfEditionData(
         nameAr: meta.nameAr,
         nameEn: meta.nameEn,
         icon: meta.icon,
-        // These optional fields may not exist in PdfEditionCategory — use safe access
         sectionTitleAr:
           ((config as Record<string, unknown> | undefined)
             ?.sectionTitleAr as string) ?? null,
@@ -186,47 +209,28 @@ export async function loadPdfEditionData(
     })
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
-  // ─ 7. Ads — only fields that exist in the PdfAd schema
-  const allActiveAds = await prisma.pdfAd.findMany({
-    where: { isActive: true },
-    orderBy: { priority: "desc" },
-  });
-
-  const editionAdMap = new Map(
-    edition.editionAds.map((ea) => [
-      ea.ad.id,
-      {
-        id: ea.ad.id,
-        titleAr: ea.ad.titleAr,
-        advertiserName: ea.ad.titleEn ?? ea.ad.titleAr,
-        imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
-        linkUrl: ea.ad.targetUrl ?? ea.ad.linkUrl ?? null,
-        phone: ea.ad.phone ?? null,
-        placementType: ea.ad.placementType,
-        priority: ea.ad.priority,
-        effectivePlacement: ea.ad.placementType,
-      } as PdfAdData,
-    ])
-  );
-
-  const ads: PdfAdData[] = [
-    ...editionAdMap.values(),
-    ...allActiveAds
-      .filter((a) => !editionAdMap.has(a.id))
-      .map(
-        (a) =>
-          ({
-            id: a.id,
-            titleAr: a.titleAr,
-            imageUrl: resolveAssetUrl(a.imageUrl) ?? "",
-            linkUrl: a.targetUrl ?? a.linkUrl ?? null,
-            phone: a.phone ?? null,
-            placementType: a.placementType,
-            priority: a.priority,
-            effectivePlacement: a.placementType,
-          }) as PdfAdData
-      ),
-  ];
+  // ─ 7. Ads — ONLY from PdfEditionAd (no global fallback)
+  //
+  // Priority source: PdfEditionAd.priority (set by admin via ↑↓ or manual input)
+  // effectivePlacement: overridePlacement if set, otherwise ad.placementType
+  // pageNumbers: which section indices (0-based) this ad appears in; [] = all
+  // isActive: already filtered in the Prisma query above
+  const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
+    id: ea.ad.id,
+    titleAr: ea.ad.titleAr,
+    titleEn: ea.ad.titleEn ?? null,
+    imageUrl: resolveAssetUrl(ea.ad.imageUrl) ?? "",
+    linkUrl: ea.ad.targetUrl ?? ea.ad.linkUrl ?? null,
+    phone: ea.ad.phone ?? null,
+    placementType: ea.ad.placementType,
+    priority: ea.priority,                          // from PdfEditionAd
+    effectivePlacement: ea.overridePlacement ?? ea.ad.placementType,
+    positionAfterCategoryId:
+      (ea.ad as { positionAfterCategoryId?: string | null })
+        .positionAfterCategoryId ?? null,
+    pageNumbers: ea.pageNumbers as number[],        // [] = all sections
+    isActive: ea.isActive,                          // already true (filtered above)
+  }));
 
   // ─ 8. Config blobs
   const theme: PdfTheme = edition.themeJson
@@ -262,7 +266,6 @@ export async function loadPdfEditionData(
     isPreview,
     categorySections,
     ads,
-    // Profile blocks removed — models do not exist in current schema
     websiteProfile: null,
     developerProfile: null,
     theme,
