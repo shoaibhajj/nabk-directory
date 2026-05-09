@@ -14,12 +14,16 @@
  * ✔ Images: all imageUrls are fetched + resized via Sharp before being
  *   embedded — no cropping, lanczos3 quality, mozjpeg compression.
  *
- * fix(pdf): 5 fixes applied 2026-05-09
+ * fix(pdf): 5 layout fixes + 4 TS type fixes
  *   1. adHalfBlock: removed aspectRatio (caused dynamic ~289pt height) → fixed height 180
  *   2. headerBanner/footerBanner: removed double-wrap View around AdBannerElement
  *   3. Sidebar: removed idx%3===0 gate → round-robin every section, up to 3 ads
  *   4. HALF_PAGE: changed idx%4 → idx%2 so ads hit every other section (not every 4th)
  *   5. FULL_PAGE floating: changed (idx+1)%2 → (idx+1)%3 to avoid 3× repetition
+ *   6. wrapWithLink style param: object → any (react-pdf Link type compat)
+ *   7. business.address → business.addressAr
+ *   8. input.subtitleAr → input.coverSubtitleAr
+ *   9. input.year removed — not in PdfDocumentInput; use editionNumber only
  */
 
 import React from "react";
@@ -102,10 +106,11 @@ function getAdHref(ad: PdfAdData): string | null {
   return null;
 }
 
+// FIX-6: style typed as `any` to satisfy react-pdf Link overloads
 function wrapWithLink(
   href: string | null,
   child: React.ReactNode,
-  style?: object
+  style?: any
 ) {
   if (!href) return child;
   return React.createElement(Link, { src: href, style }, child);
@@ -839,13 +844,16 @@ function CoverPage({
     input.isPreview
       ? React.createElement(Text, { style: styles.watermark }, "مسودة")
       : null,
-    React.createElement(Text, { style: styles.coverTitle }, input.titleAr),
+    // FIX-8: use coverTitleAr if available, fall back to titleAr
+    React.createElement(Text, { style: styles.coverTitle }, input.coverTitleAr ?? input.titleAr),
     React.createElement(View, { style: styles.coverDivider }),
-    React.createElement(Text, { style: styles.coverSubtitle }, input.subtitleAr ?? ""),
+    // FIX-8: subtitleAr → coverSubtitleAr
+    React.createElement(Text, { style: styles.coverSubtitle }, input.coverSubtitleAr ?? ""),
     React.createElement(
       Text,
       { style: styles.coverMeta },
-      `${input.cityNameAr} • الإصدار ${input.editionNumber} • ${input.year}`
+      // FIX-9: removed input.year (not in type) — show city + edition number only
+      `${input.cityNameAr} • الإصدار ${input.editionNumber}`
     )
   );
 }
@@ -1158,8 +1166,9 @@ function BusinessCardStandard({
         View,
         { style: styles.businessInfo },
         React.createElement(Text, { style: styles.businessName }, business.nameAr),
-        business.address
-          ? React.createElement(Text, { style: styles.businessAddress }, business.address)
+        // FIX-7: address → addressAr
+        business.addressAr
+          ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
           : null,
         business.descriptionAr
           ? React.createElement(Text, { style: styles.businessDescription }, business.descriptionAr)
@@ -1189,8 +1198,9 @@ function BusinessCardDense({
     View,
     { style: styles.denseCard },
     React.createElement(Text, { style: styles.businessName }, business.nameAr),
-    business.address
-      ? React.createElement(Text, { style: styles.businessAddress }, business.address)
+    // FIX-7: address → addressAr
+    business.addressAr
+      ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
       : null,
     ...phones.map((p, i) =>
       React.createElement(
