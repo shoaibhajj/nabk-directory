@@ -1,25 +1,24 @@
 /**
- * GET /admin/pdf/editions/[id]/preview
+ * GET /api/pdf/preview-pdf?id=<editionId>
  *
- * Streams a draft PDF inline so the browser opens it directly (no download).
- * Uses only the edition-specific ads stored in PdfEditionAd — zero fallback
- * to global ads. isPreview=true stamps "مسودة" watermark on every page.
+ * Generates a preview PDF (isPreview=true, watermark on every page)
+ * and streams it inline so the browser PDF viewer opens it directly.
  *
- * Access: admin only.
+ * - No PdfGenerationJob is recorded (preview only, not a final export).
+ * - Ads come ONLY from PdfEditionAd (zero edition ads = zero ads in PDF).
+ * - Auth: ADMIN or SUPER_ADMIN only.
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth-guards";
+import { prisma } from "@/lib/prisma";
 import { loadPdfEditionData } from "@/lib/pdf/data-loader";
 import { generatePdf } from "@/lib/pdf/generator";
-import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest) {
   // ── auth
   try {
     await requireAdmin();
@@ -27,7 +26,12 @@ export async function GET(
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const { id: editionId } = await params;
+  const { searchParams } = new URL(req.url);
+  const editionId = searchParams.get("id");
+
+  if (!editionId) {
+    return NextResponse.json({ error: "id مطلوب" }, { status: 400 });
+  }
 
   // ── verify edition exists
   const edition = await prisma.pdfEdition.findUnique({
@@ -39,31 +43,28 @@ export async function GET(
   }
 
   try {
-    // isPreview = true → watermark on every page + reads only edition ads
+    // isPreview=true → watermark + reads only PdfEditionAd entries
     const input = await loadPdfEditionData(editionId, true);
     const result = await generatePdf(input);
 
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    const filename = `preview-${edition.slug}-${Date.now()}.pdf`;
+    const filename = `preview-${edition.slug}.pdf`;
 
     return new NextResponse(new Uint8Array(result.buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        // inline → browser PDF viewer, not a download
+        // inline → browser PDF viewer, no download dialog
         "Content-Disposition": `inline; filename="${filename}"`,
         "Content-Length": String(result.buffer.length),
         "Cache-Control": "no-store, no-cache",
       },
     });
   } catch (err) {
-    console.error("[preview/route] failed:", err);
+    console.error("[preview-pdf/route] failed:", err);
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }

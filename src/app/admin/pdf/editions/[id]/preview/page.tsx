@@ -1,21 +1,19 @@
 /**
  * /admin/pdf/editions/[id]/preview
  *
- * Generates a preview (isPreview=true) PDF on demand and streams it
- * directly to the browser. No job is saved to the database.
+ * A simple page that opens the PDF preview inline in the browser.
+ * The actual PDF bytes are served by GET /api/pdf/preview-pdf?id=...
+ * which streams with Content-Disposition: inline.
  *
- * Opens in a new tab via the "فتح معاينة PDF" link in ads/page.tsx.
+ * Why not a Route Handler here?
+ * Next.js App Router forbids having both page.tsx and route.ts
+ * in the same folder. So the PDF streaming lives in /api/pdf/preview-pdf.
  */
-
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
-import { loadPdfEditionData } from "@/lib/pdf/data-loader";
-import { generatePdf } from "@/lib/pdf/generator";
 
 export const dynamic = "force-dynamic";
-// PDF generation can take >10 s for large editions
-export const maxDuration = 60;
 
 export default async function PreviewPage({
   params,
@@ -27,22 +25,65 @@ export default async function PreviewPage({
 
   const edition = await prisma.pdfEdition.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, titleAr: true },
   });
   if (!edition) notFound();
 
-  const input = await loadPdfEditionData(id, true /* isPreview */);
-  const result = await generatePdf(input);
+  const pdfUrl = `/api/pdf/preview-pdf?id=${id}`;
 
-  if (!result.ok) {
-    // Redirect back with an error query param so the user sees feedback
-    redirect(`/admin/pdf/editions/${id}/ads?error=${encodeURIComponent(result.error)}`);
-  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", margin: 0, padding: 0 }}>
+      {/* Thin header bar */}
+      <div
+        style={{
+          padding: "8px 16px",
+          background: "#1a1a1a",
+          color: "#fff",
+          fontSize: 13,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexShrink: 0,
+        }}
+      >
+        <span>معاينة: {edition.titleAr}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <a
+            href={pdfUrl}
+            download
+            style={{
+              background: "#01696f",
+              color: "#fff",
+              padding: "4px 14px",
+              borderRadius: 6,
+              textDecoration: "none",
+              fontSize: 12,
+            }}
+          >
+            ⬇️ تحميل
+          </a>
+          <a
+            href={`/admin/pdf/editions/${id}/ads`}
+            style={{
+              background: "#333",
+              color: "#fff",
+              padding: "4px 14px",
+              borderRadius: 6,
+              textDecoration: "none",
+              fontSize: 12,
+            }}
+          >
+            ← إدارة الإعلانات
+          </a>
+        </div>
+      </div>
 
-    // Stream the PDF bytes back as an inline PDF response.
-    // Next.js App Router supports returning a Response from a page when
-    // using route handlers; for a Server Component we use a Route Handler
-    // instead. However, since this must be a page route (for the Link href
-    // to work), we redirect to a route handler that streams the PDF.
-    redirect(`/admin/pdf/editions/${id}/preview/route?isPreview=true`);
-  }
+      {/* PDF iframe — fills remaining height */}
+      <iframe
+        src={pdfUrl}
+        style={{ flex: 1, width: "100%", border: "none" }}
+        title={`معاينة ${edition.titleAr}`}
+      />
+    </div>
+  );
+}
