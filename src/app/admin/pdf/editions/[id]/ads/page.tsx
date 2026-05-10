@@ -53,9 +53,6 @@ export default async function EditionAdsPage({
   ]);
 
   const orderedIds = editionAds.map((ea) => ea.id);
-
-  // Key derived from count so React remounts the <select> after every
-  // successful addition — fixes stale defaultValue in Server Component.
   const addFormKey = `add-form-${editionAds.length}`;
 
   return (
@@ -75,6 +72,78 @@ export default async function EditionAdsPage({
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* دليل الحقول — جدول توضيحي                                         */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900 dark:bg-blue-950/30">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-300">
+          <span>📖</span> دليل الحقول — فهم الفرق بين الصفحات والأولوية والترتيب
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-blue-200 dark:border-blue-800">
+                <th className="pb-2 pr-3 text-right font-semibold text-blue-900 dark:text-blue-200">الحقل</th>
+                <th className="pb-2 pr-3 text-right font-semibold text-blue-900 dark:text-blue-200">معناه الحقيقي</th>
+                <th className="pb-2 pr-3 text-right font-semibold text-blue-900 dark:text-blue-200">متى يُستخدم</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-blue-100 dark:divide-blue-900">
+              <tr>
+                <td className="py-2 pr-3 font-mono text-xs font-bold text-blue-700 dark:text-blue-400">
+                  الصفحات<br />
+                  <span className="font-normal text-blue-500">pageNumbers</span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  أرقام <strong>صفحات PDF الفعلية</strong> (1 = أول صفحة في الملف).
+                  <br />
+                  <span className="text-xs text-blue-600 dark:text-blue-400">
+                    مثال: الغلاف = 1، الفهرس = 2، أول قسم = 3 أو 4 حسب بنية الإصدار.
+                  </span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  تحديد <em>في أي صفحة</em> يظهر الإعلان داخل الـ PDF.
+                  <br />
+                  اتركها <strong>فارغة</strong> لإظهاره في كل الصفحات تلقائياً.
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-3 font-mono text-xs font-bold text-blue-700 dark:text-blue-400">
+                  الأولوية<br />
+                  <span className="font-normal text-blue-500">priority</span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  رقم يحدد <strong>من يظهر أولاً</strong> إذا تنافس عدة إعلانات على نفس الموضع.
+                  <br />
+                  <span className="text-xs text-blue-600 dark:text-blue-400">الأعلى قيمةً = الأعلى أولوية.</span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  ترتيب الظهور <em>داخل نفس الصفحة أو القسم</em> عند وجود إعلانات متعددة.
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-3 font-mono text-xs font-bold text-blue-700 dark:text-blue-400">
+                  الترتيب ↑↓<br />
+                  <span className="font-normal text-blue-500">sortOrder</span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  ترتيب <strong>عرض الصفوف في هذا الجدول فقط</strong>.
+                  <br />
+                  <span className="text-xs text-blue-600 dark:text-blue-400">لا علاقة له بترتيب الظهور في الـ PDF.</span>
+                </td>
+                <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
+                  تنظيم القائمة أمامك فقط — لا يؤثر على الناتج النهائي.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300">
+          <strong>⚠️ كيف تعرف رقم الصفحة؟</strong> ولّد معاينة PDF أولاً وشاهد الأرقام الموجودة أسفل كل صفحة.
+          بنية الصفحات دائماً: غلاف (1) ← مقدمة إن وُجدت (2) ← فهرس ← ثم أقسام (كل قسم = صفحة فاصلة + صفحة محتوى).
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
       {/* القسم B — إضافة إعلان                                            */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <section className="mb-8 rounded-xl border border-border bg-secondary/20 p-5">
@@ -87,7 +156,6 @@ export default async function EditionAdsPage({
             لا توجد إعلانات نشطة في المكتبة.
           </p>
         ) : (
-          // key forces full remount after submission so defaultValue resets
           <form
             key={addFormKey}
             action={async (formData: FormData) => {
@@ -141,7 +209,10 @@ export default async function EditionAdsPage({
                   <th className="px-3 py-3 font-semibold">الإعلان</th>
                   <th className="px-3 py-3 font-semibold">الموضع الأصلي</th>
                   <th className="px-3 py-3 font-semibold">تجاوز الموضع</th>
-                  <th className="px-3 py-3 font-semibold">الصفحات</th>
+                  <th className="px-3 py-3 font-semibold">
+                    صفحات PDF
+                    <span className="mr-1 text-xs font-normal text-muted-foreground">(فارغ = كل الصفحات)</span>
+                  </th>
                   <th className="px-3 py-3 font-semibold">الأولوية</th>
                   <th className="px-3 py-3 font-semibold">فعّال</th>
                   <th className="px-3 py-3 font-semibold">ملاحظات</th>
@@ -251,7 +322,7 @@ export default async function EditionAdsPage({
                         </form>
                       </td>
 
-                      {/* ── Page numbers ── */}
+                      {/* ── Page numbers (real PDF pages, 1-based) ── */}
                       <td className="px-3 py-3">
                         <form
                           action={async (fd: FormData) => {
@@ -261,27 +332,33 @@ export default async function EditionAdsPage({
                               ? raw
                                   .split(",")
                                   .map((s) => parseInt(s.trim(), 10))
-                                  .filter((n) => !isNaN(n) && n >= 0)
+                                  .filter((n) => !isNaN(n) && n >= 1)
                               : [];
                             await updateEditionAd(ea.id, editionId, {
                               pageNumbers: pages,
                             });
                           }}
-                          className="flex gap-1"
+                          className="flex flex-col gap-1"
                         >
-                          <input
-                            name="pageNumbers"
-                            type="text"
-                            defaultValue={ea.pageNumbers.join(", ")}
-                            placeholder="كل الصفحات"
-                            className="w-28 rounded border border-border bg-background px-2 py-1 text-sm"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded bg-secondary px-2 py-1 text-xs hover:bg-secondary/70"
-                          >
-                            حفظ
-                          </button>
+                          <div className="flex gap-1">
+                            <input
+                              name="pageNumbers"
+                              type="text"
+                              defaultValue={ea.pageNumbers.join(", ")}
+                              placeholder="كل الصفحات"
+                              title="أرقام صفحات PDF الفعلية مفصولة بفاصلة — مثال: 5, 11"
+                              className="w-28 rounded border border-border bg-background px-2 py-1 text-sm"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded bg-secondary px-2 py-1 text-xs hover:bg-secondary/70"
+                            >
+                              حفظ
+                            </button>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            رقم صفحة PDF الفعلي
+                          </span>
                         </form>
                       </td>
 
@@ -295,21 +372,27 @@ export default async function EditionAdsPage({
                               priority: isNaN(v) ? 0 : v,
                             });
                           }}
-                          className="flex gap-1"
+                          className="flex flex-col gap-1"
                         >
-                          <input
-                            name="priority"
-                            type="number"
-                            defaultValue={ea.priority}
-                            className="w-14 rounded border border-border bg-background px-2 py-1 text-center text-sm"
-                            min={0}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded bg-secondary px-2 py-1 text-xs hover:bg-secondary/70"
-                          >
-                            حفظ
-                          </button>
+                          <div className="flex gap-1">
+                            <input
+                              name="priority"
+                              type="number"
+                              defaultValue={ea.priority}
+                              title="كلما زاد الرقم، ظهر الإعلان أولاً عند التنافس"
+                              className="w-14 rounded border border-border bg-background px-2 py-1 text-center text-sm"
+                              min={0}
+                            />
+                            <button
+                              type="submit"
+                              className="rounded bg-secondary px-2 py-1 text-xs hover:bg-secondary/70"
+                            >
+                              حفظ
+                            </button>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            الأعلى = يظهر أولاً
+                          </span>
                         </form>
                       </td>
 
@@ -384,14 +467,19 @@ export default async function EditionAdsPage({
           </div>
         )}
 
-        <p className="mt-3 text-xs text-muted-foreground">
-          💡 <strong>الصفحات:</strong> اتركها فارغة لإظهار الإعلان في كل
-          الصفحات، أو أدخل أرقاماً مفصولة بفاصلة مثل{" "}
-          <span dir="ltr">2, 5, 8</span>.
-          <br />
-          💡 <strong>الترتيب:</strong> استخدم ↑↓ لتغيير ترتيب ظهور الإعلانات
-          في الـ PDF، أو أدخل رقماً يدوياً في حقل الأولوية.
-        </p>
+        <div className="mt-4 rounded-xl border border-border bg-secondary/10 px-4 py-3 text-xs text-muted-foreground">
+          <p className="mb-1">
+            💡 <strong>صفحات PDF:</strong> أدخل أرقام الصفحات الفعلية مفصولة بفاصلة مثل{" "}
+            <span dir="ltr" className="font-mono">5, 11</span>{" "}
+            — اتركها <strong>فارغة</strong> لإظهار الإعلان تلقائياً في كل الصفحات المناسبة.
+          </p>
+          <p className="mb-1">
+            💡 <strong>الأولوية:</strong> عند تنافس عدة إعلانات على نفس الموضع، يظهر صاحب الأولوية الأعلى أولاً.
+          </p>
+          <p>
+            💡 <strong>الترتيب ↑↓:</strong> يُغيّر ترتيب الصفوف في هذا الجدول فقط — لا يؤثر على الـ PDF.
+          </p>
+        </div>
       </section>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
