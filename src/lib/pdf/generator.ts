@@ -132,7 +132,8 @@ function wrapWithLink(
   style?: unknown,
 ) {
   if (!href) return child;
-  return React.createElement(Link, { src: href, style }, child);
+  // cast style to any to satisfy @react-pdf Link style typing
+  return React.createElement(Link, { src: href, style: style as any }, child);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
