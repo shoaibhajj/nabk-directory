@@ -1,36 +1,40 @@
 /**
  * PDF Generation Engine for دليل النبك.
  *
- * ✔ Index: page numbers on RIGHT side (RTL)
- * ✔ Ad placement fully respected:
- *   FULL_PAGE            → standalone page (full bleed image)
- *   HALF_PAGE_TOP/BOTTOM → inline inside CategorySectionPage (top / bottom)
- *   SIDEBAR_LEFT/RIGHT   → 2-column layout: businesses | stacked ad strips
- *   HEADER_BANNER        → thin banner at top of section page
- *   FOOTER_BANNER        → thin banner at bottom of section page
- *   CATEGORY_SPONSOR     → sponsor badge in the section header
- * ✔ positionAfterCategoryId on PdfAdData – ad appears after
- *   the specified category section (falls back to round-robin if null)
- * ✔ Images: all imageUrls are fetched + resized via Sharp before being
- *   embedded — no cropping, lanczos3 quality, mozjpeg compression.
- * ✔ Phase 5:
- *   - isActive filter: ads with isActive=false are excluded (already filtered
- *     in data-loader, but double-checked here for safety)
- *   - pageNumbers: if non-empty, ad only appears in sections whose PDF content
- *     page number is in the pageNumbers array; empty = show in all sections
- *     (round-robin). pageNumbers are 1-based PDF page numbers as shown in the
- *     document, NOT 0-based section indices.
- * ✔ Fix: QR code is now a clickable Link → business.publicUrl
- * ✔ Fix: QR image positioned on the LEFT side of the business card (RTL)
- * ✔ Fix: Business logo (media_files image) removed from card entirely
- * ✔ Fix: adHalfBlock wrapped in fixed-height View to prevent overflow
- * ✔ Fix: adBannerBlock uses fixed height wrapper to constrain banner image
- * ✔ Fix: guard undefined ad picks in all floating round-robin loops
- * ✔ Fix: adAllowedInSection coerces pageNumbers to Number (guards Int[] → string via JSON)
- * ✔ Fix: round-robin counters advance unconditionally so ads rotate across ALL sections
- * ✔ Fix: buildSectionPageMap() is now the single source of truth for section→page mapping.
- *         adAllowedInSection receives the pre-built map and does a simple lookup with ±1
- *         tolerance — the old idx*2+4/idx*2+5 formula is gone completely.
+ * ## Ad placement overview
+ *
+ * | Placement           | Behaviour                                              |
+ * |---------------------|--------------------------------------------------------|
+ * | FULL_PAGE           | Standalone page (full-bleed image)                     |
+ * | HALF_PAGE_TOP/BOTTOM| Inline inside CategorySectionPage (top / bottom)       |
+ * | SIDEBAR_LEFT/RIGHT  | 2-column layout: businesses | stacked ad strips          |
+ * | HEADER_BANNER       | Thin banner at top of section page                     |
+ * | FOOTER_BANNER       | Thin banner at bottom of section page                  |
+ * | CATEGORY_SPONSOR    | Sponsor badge in the section header                    |
+ *
+ * ## pageNumbers field — how it works (IMPORTANT)
+ *
+ * `pageNumbers` on a PdfEditionAd stores the 1-based SECTION INDICES where
+ * the ad should appear.
+ *
+ * Examples (assuming the PDF has 6 sections):
+ *   []        → show in ALL sections (round-robin)
+ *   [1]       → show only in the 1st section  (index 0)
+ *   [3, 5]    → show only in the 3rd and 5th sections (indices 2, 4)
+ *
+ * This is deliberately decoupled from the physical PDF page number because
+ * react-pdf page numbering is non-deterministic from the generator's point
+ * of view (ads themselves add pages, intro is optional, etc.).
+ *
+ * The UI label in the admin panel should read:
+ *   "رقم القسم (1 = أول قسم)" — not "رقم الصفحة".
+ *
+ * ## Other notes
+ * - Images: fetched + resized via Sharp (no cropping, mozjpeg compression).
+ * - QR code: clickable Link → business.publicUrl, positioned on LEFT (RTL).
+ * - Business logo (media_files image) removed from card entirely.
+ * - adHalfBlock / adBannerBlock wrapped in fixed-height Views.
+ * - Round-robin counters advance unconditionally so ads rotate across ALL sections.
  */
 
 import React from "react";
@@ -60,11 +64,17 @@ import type {
   GenerationResult,
 } from "./types";
 
-// ── Page dimensions (pt) ──────────────────────────────────────────────────────────────────
-const PAGE_INNER_W = 515;
-const SIDEBAR_W    = 130;
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Category icon map ───────────────────────────────────────────────────────────────────
+const PAGE_INNER_W = 515;
+const SIDEBAR_W = 130;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Category icon map
+// ─────────────────────────────────────────────────────────────────────────────
+
 const CATEGORY_ICONS: Record<string, string> = {
   "ميكانيك وسيارات": "🚗",
   "مطاعم وكافيهات": "🍽️",
@@ -92,7 +102,10 @@ function getCategoryIcon(nameAr: string): string {
   return "📋";
 }
 
-// ── QR ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// QR helper
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function buildQrDataUrl(url: string): Promise<string> {
   return QRCode.toDataURL(url, {
     errorCorrectionLevel: "M",
@@ -101,6 +114,10 @@ async function buildQrDataUrl(url: string): Promise<string> {
     color: { dark: "#1a1a1a", light: "#ffffff" },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ad link helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 function getAdHref(ad: PdfAdData): string | null {
   if (ad.linkUrl?.trim()) return ad.linkUrl.trim();
@@ -112,13 +129,158 @@ function getAdHref(ad: PdfAdData): string | null {
 function wrapWithLink(
   href: string | null,
   child: React.ReactNode,
-  style?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+  style?: unknown,
 ) {
   if (!href) return child;
   return React.createElement(Link, { src: href, style }, child);
 }
 
-// ── Style factory ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Ad placement classification
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isStandalonePage(placement: string): boolean {
+  return placement === "FULL_PAGE";
+}
+
+function isInlinePlacement(placement: string): boolean {
+  return [
+    "SIDEBAR_LEFT",
+    "SIDEBAR_RIGHT",
+    "HEADER_BANNER",
+    "FOOTER_BANNER",
+    "CATEGORY_SPONSOR",
+    "HALF_PAGE_TOP",
+    "HALF_PAGE_BOTTOM",
+  ].includes(placement);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// adAllowedInSection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Decides whether an ad should appear in a given section.
+ *
+ * `pageNumbers` stores 1-based section indices entered by the admin:
+ *   - Empty array ([]): show in ALL sections — no restriction.
+ *   - [1]            : show only in the 1st section  (sectionIdx === 0).
+ *   - [2, 4]         : show only in 2nd and 4th sections (indices 1, 3).
+ *
+ * @param ad          The ad to check.
+ * @param sectionIdx  Zero-based index of the current section in the sorted
+ *                    sections array.
+ */
+function adAllowedInSection(ad: PdfAdData, sectionIdx: number): boolean {
+  // No restriction — show everywhere.
+  if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
+
+  // Coerce every entry to a finite positive integer.
+  const targetIndices = ad.pageNumbers
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n >= 1)
+    .map((n) => n - 1); // convert 1-based → 0-based
+
+  // If all entries were invalid, treat as unrestricted.
+  if (targetIndices.length === 0) return true;
+
+  return targetIndices.includes(sectionIdx);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image cache
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ImageCache = Map<string, string | null>;
+
+const AD_IMAGE_SIZES: Record<string, { w: number; h: number }> = {
+  FULL_PAGE:        { w: 595,           h: 842 },
+  HALF_PAGE_TOP:    { w: PAGE_INNER_W,  h: 180 },
+  HALF_PAGE_BOTTOM: { w: PAGE_INNER_W,  h: 180 },
+  HEADER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
+  FOOTER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
+  SIDEBAR_LEFT:     { w: SIDEBAR_W * 2, h: 400 },
+  SIDEBAR_RIGHT:    { w: SIDEBAR_W * 2, h: 400 },
+  CATEGORY_SPONSOR: { w: 120,           h: 40  },
+};
+
+async function buildImageCache(ads: PdfAdData[]): Promise<ImageCache> {
+  const cache: ImageCache = new Map();
+  await Promise.all(
+    ads
+      .filter((ad) => !!ad.imageUrl)
+      .map(async (ad) => {
+        if (cache.has(ad.imageUrl)) return;
+        const dims =
+          AD_IMAGE_SIZES[ad.effectivePlacement] ?? { w: PAGE_INNER_W, h: 300 };
+        const dataUri = await fetchAndResizeImage(
+          ad.imageUrl,
+          dims.w,
+          dims.h,
+          { background: { r: 255, g: 255, b: 255, alpha: 1 }, quality: 82 },
+        );
+        cache.set(ad.imageUrl, dataUri);
+        if (!dataUri) {
+          console.warn(
+            `[generator] Could not load image for ad "${ad.titleAr}" (${ad.imageUrl})`,
+          );
+        }
+      }),
+  );
+  return cache;
+}
+
+function resolveAdImage(ad: PdfAdData, cache: ImageCache): string | null {
+  if (!ad.imageUrl) return null;
+  return cache.get(ad.imageUrl) ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Index entries (page numbers shown in the Fihris page)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Computes the physical PDF page number for each section so that the
+ * Fihris (index) page shows accurate page numbers.
+ *
+ * PDF structure:
+ *   Page 1            = Cover
+ *   Page 2            = Intro  (only when hasIntro = true)
+ *   Page 2 or 3       = Fihris
+ *   Then per section:
+ *     page N   = Divider
+ *     page N+1 = Content   ← shown in the Fihris
+ */
+function buildIndexEntries(
+  sections: PdfCategorySection[],
+  hasIntro: boolean,
+) {
+  // pageCounter starts right after: Cover + optional Intro + Fihris
+  let pageCounter = hasIntro ? 3 : 2;
+
+  return sections.map((sec, idx) => {
+    pageCounter++;                    // divider page
+    const contentPage = ++pageCounter; // content page
+    return {
+      categoryId: sec.categoryId,
+      nameAr: sec.nameAr,
+      icon: sec.icon ?? getCategoryIcon(sec.nameAr),
+      contentPage,
+      businesses: sec.businesses.map((b) => ({
+        id: b.id,
+        nameAr: b.nameAr,
+        page: contentPage,
+      })),
+      // sectionIdx kept for debugging — not used in ad logic
+      sectionIdx: idx,
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Style factory
+// ─────────────────────────────────────────────────────────────────────────────
+
 function makeStyles(theme: PdfTheme, margins: PdfMargins) {
   return StyleSheet.create({
     page: {
@@ -293,7 +455,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginBottom: 6,
       backgroundColor: theme.bgColor,
     },
-    // RTL layout: info on RIGHT, QR on LEFT
     qrContainer: {
       display: "flex",
       flexDirection: "row",
@@ -310,14 +471,12 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       lineHeight: 1.4,
     },
-    // businessInfo takes remaining space on the right (RTL)
     businessInfo: { flex: 1, paddingLeft: 8 },
     adFullPage: {
       width: "100%",
       height: "100%",
       objectFit: "contain",
     },
-    // Wrapper View constrains height — Image fills inside
     adHalfWrapper: {
       width: "100%",
       height: 180,
@@ -355,7 +514,6 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
       marginTop: 4,
       flexShrink: 0,
     },
-    // Banner wrapper constrains height strictly
     adBannerWrapper: {
       width: "100%",
       height: 80,
@@ -579,158 +737,42 @@ function makeStyles(theme: PdfTheme, margins: PdfMargins) {
   });
 }
 
-// ── Ad placement helpers ─────────────────────────────────────────────────────────────────
-function isStandalonePage(placement: string): boolean {
-  return placement === "FULL_PAGE";
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline ad elements
+// ─────────────────────────────────────────────────────────────────────────────
 
-function isInlinePlacement(placement: string): boolean {
-  return [
-    "SIDEBAR_LEFT",
-    "SIDEBAR_RIGHT",
-    "HEADER_BANNER",
-    "FOOTER_BANNER",
-    "CATEGORY_SPONSOR",
-    "HALF_PAGE_TOP",
-    "HALF_PAGE_BOTTOM",
-  ].includes(placement);
-}
-
-// ── Section → PDF page map (single source of truth) ─────────────────────────────────────
-/**
- * Builds a map from section index → the PDF content page number for that section.
- *
- * PDF structure:
- *   Page 1              = Cover
- *   Page 2              = Intro  (only when hasIntro = true)
- *   Page 2 or 3         = Index
- *   Then for each section:
- *     odd  page = Divider
- *     even page = Content   ← this is what the admin enters in pageNumbers
- *
- * This is the ONLY place in the file that knows the page layout formula.
- * Both the Index renderer and adAllowedInSection use this map.
- */
-function buildSectionPageMap(
-  sections: PdfCategorySection[],
-  hasIntro: boolean,
-): Map<number, number> {
-  // pageCounter starts after: Cover (1) + optional Intro (1) + Index (1)
-  let pageCounter = hasIntro ? 3 : 2;
-  const map = new Map<number, number>();
-  sections.forEach((_section, idx) => {
-    pageCounter++; // divider page
-    const contentPage = ++pageCounter; // content page
-    map.set(idx, contentPage);
-  });
-  return map;
-}
-
-/**
- * Returns true if this ad is allowed to appear in the given section.
- *
- * pageNumbers stores 1-based PDF page numbers as entered by the admin.
- * Empty array → show in ALL sections (round-robin).
- *
- * We look up the section's actual content page from the pre-built map
- * and check whether any of the ad's target pages matches it.
- *
- * A ±1 tolerance is applied so that entering the DIVIDER page (one before
- * the content page) also works — useful when the admin is unsure which
- * page is the divider vs. the content page.
- *
- * FIX: replaces the broken idx*2+4 / idx*2+5 formula that only matched
- * even or only odd page numbers respectively.
- */
-function adAllowedInSection(
-  ad: PdfAdData,
-  sectionIdx: number,
-  sectionPageMap: Map<number, number>,
-): boolean {
-  if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
-
-  const nums = ad.pageNumbers
-    .map(Number)
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (nums.length === 0) return true;
-
-  const contentPage = sectionPageMap.get(sectionIdx);
-  if (contentPage === undefined) return false;
-
-  // Accept exact match OR the divider page (contentPage - 1)
-  return nums.includes(contentPage) || nums.includes(contentPage - 1);
-}
-
-// ── Resolved image cache ──────────────────────────────────────────────────────────────────
-type ImageCache = Map<string, string | null>;
-
-const AD_IMAGE_SIZES: Record<string, { w: number; h: number }> = {
-  FULL_PAGE:        { w: 595,           h: 842 },
-  HALF_PAGE_TOP:    { w: PAGE_INNER_W,  h: 180 },
-  HALF_PAGE_BOTTOM: { w: PAGE_INNER_W,  h: 180 },
-  HEADER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
-  FOOTER_BANNER:    { w: PAGE_INNER_W,  h: 80  },
-  SIDEBAR_LEFT:     { w: SIDEBAR_W * 2, h: 400 },
-  SIDEBAR_RIGHT:    { w: SIDEBAR_W * 2, h: 400 },
-  CATEGORY_SPONSOR: { w: 120,           h: 40  },
-};
-
-async function buildImageCache(ads: PdfAdData[]): Promise<ImageCache> {
-  const cache: ImageCache = new Map();
-  await Promise.all(
-    ads
-      .filter((ad) => !!ad.imageUrl)
-      .map(async (ad) => {
-        const key = ad.imageUrl;
-        if (cache.has(key)) return;
-        const dims = AD_IMAGE_SIZES[ad.effectivePlacement] ?? { w: PAGE_INNER_W, h: 300 };
-        const dataUri = await fetchAndResizeImage(ad.imageUrl, dims.w, dims.h, {
-          background: { r: 255, g: 255, b: 255, alpha: 1 },
-          quality: 82,
-        });
-        cache.set(key, dataUri);
-        if (!dataUri) {
-          console.warn(`[generator] Could not load image for ad "${ad.titleAr}" (${ad.imageUrl})`);
-        }
-      })
-  );
-  return cache;
-}
-
-function resolveAdImage(ad: PdfAdData, cache: ImageCache): string | null {
-  if (!ad.imageUrl) return null;
-  return cache.get(ad.imageUrl) ?? null;
-}
-
-// ── Inline ad elements ──────────────────────────────────────────────────────────────────
 function AdBannerElement({
-  ad, dataUri, styles,
+  ad,
+  dataUri,
+  styles,
 }: {
   ad: PdfAdData;
   dataUri: string | null;
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  // Wrap in a fixed-height View so the image cannot push content below
   const inner = React.createElement(
     View,
     { style: styles.adBannerWrapper },
     dataUri
       ? React.createElement(Image, { src: dataUri, style: styles.adBannerImg })
-      : React.createElement(Text, { style: styles.adBannerText }, ad.titleAr)
+      : React.createElement(Text, { style: styles.adBannerText }, ad.titleAr),
   );
   return wrapWithLink(href, inner, { width: "100%" });
 }
 
 function AdSidebarElement({
-  ads, styles, imageCache,
+  ads,
+  styles,
+  imageCache,
 }: {
   ads: PdfAdData[];
   styles: ReturnType<typeof makeStyles>;
   imageCache: ImageCache;
 }) {
   return React.createElement(
-    View, { style: styles.adSidebarCol },
+    View,
+    { style: styles.adSidebarCol },
     ...ads.map((ad) => {
       const href = getAdHref(ad);
       const dataUri = resolveAdImage(ad, imageCache);
@@ -738,51 +780,66 @@ function AdSidebarElement({
         ? React.createElement(Image, { src: dataUri, style: styles.adSidebarImg })
         : React.createElement(Text, { style: styles.adSidebarText }, ad.titleAr);
       return wrapWithLink(href, content, { width: "100%" });
-    })
+    }),
   );
 }
 
 function AdSponsorBadge({
-  ad, styles,
+  ad,
+  styles,
 }: {
   ad: PdfAdData;
   styles: ReturnType<typeof makeStyles>;
 }) {
   return React.createElement(
-    View, { style: styles.adSponsorBadge },
-    React.createElement(Text, { style: styles.adSponsorText }, `راعي: ${ad.titleEn ?? ad.titleAr}`)
+    View,
+    { style: styles.adSponsorBadge },
+    React.createElement(
+      Text,
+      { style: styles.adSponsorText },
+      `راعي: ${ad.titleEn ?? ad.titleAr}`,
+    ),
   );
 }
 
 function AdHalfPageBlock({
-  ad, dataUri, styles,
+  ad,
+  dataUri,
+  styles,
 }: {
   ad: PdfAdData;
   dataUri: string | null;
   styles: ReturnType<typeof makeStyles>;
 }) {
   const href = getAdHref(ad);
-  // Fixed-height wrapper prevents image from expanding beyond 180pt
   const imageNode = dataUri
     ? React.createElement(
         View,
         { style: styles.adHalfWrapper },
-        React.createElement(Image, { src: dataUri, style: styles.adHalfBlock })
+        React.createElement(Image, { src: dataUri, style: styles.adHalfBlock }),
       )
     : React.createElement(
         View,
         { style: [styles.adTextCard, { height: 180 }] },
         React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-        React.createElement(Text, { style: styles.adTextBody }, ad.titleEn ?? ad.titleAr)
+        React.createElement(
+          Text,
+          { style: styles.adTextBody },
+          ad.titleEn ?? ad.titleAr,
+        ),
       );
   return React.createElement(
-    View, { style: { width: "100%", marginVertical: 8 } },
-    wrapWithLink(href, imageNode, { width: "100%" })
+    View,
+    { style: { width: "100%", marginVertical: 8 } },
+    wrapWithLink(href, imageNode, { width: "100%" }),
   );
 }
 
 function StandaloneAdPage({
-  ad, dataUri, styles, pageSize,
+  ad,
+  dataUri,
+  styles,
+  pageSize,
 }: {
   ad: PdfAdData;
   dataUri: string | null;
@@ -791,44 +848,79 @@ function StandaloneAdPage({
 }) {
   const href = getAdHref(ad);
   if (dataUri) {
-    const image = React.createElement(Image, { src: dataUri, style: styles.adFullPage });
+    const image = React.createElement(Image, {
+      src: dataUri,
+      style: styles.adFullPage,
+    });
     return React.createElement(
-      Page, { size: pageSize, style: styles.adStandalonePage },
-      wrapWithLink(href, image, { width: "100%", height: "100%" })
+      Page,
+      { size: pageSize, style: styles.adStandalonePage },
+      wrapWithLink(href, image, { width: "100%", height: "100%" }),
     );
   }
   return React.createElement(
-    Page, { size: pageSize, style: styles.page },
-    React.createElement(View, { style: styles.adTextCard },
+    Page,
+    { size: pageSize, style: styles.page },
+    React.createElement(
+      View,
+      { style: styles.adTextCard },
       React.createElement(Text, { style: styles.adTextTitle }, ad.titleAr),
-      ad.titleEn ? React.createElement(Text, { style: styles.adTextBody }, ad.titleEn) : null,
-      React.createElement(Text, { style: styles.adTextPhone },
-        (ad as PdfAdData & { phone?: string }).phone ?? "")
-    )
+      ad.titleEn
+        ? React.createElement(Text, { style: styles.adTextBody }, ad.titleEn)
+        : null,
+      React.createElement(
+        Text,
+        { style: styles.adTextPhone },
+        (ad as PdfAdData & { phone?: string }).phone ?? "",
+      ),
+    ),
   );
 }
 
-// ── Cover page ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Cover page
+// ─────────────────────────────────────────────────────────────────────────────
+
 function CoverPage({
-  input, styles,
+  input,
+  styles,
 }: {
   input: PdfDocumentInput;
   styles: ReturnType<typeof makeStyles>;
 }) {
   return React.createElement(
-    Page, { size: input.pageSize, style: styles.coverPage },
-    input.isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
-    React.createElement(Text, { style: styles.coverTitle }, input.coverTitleAr ?? input.titleAr),
+    Page,
+    { size: input.pageSize, style: styles.coverPage },
+    input.isPreview
+      ? React.createElement(Text, { style: styles.watermark }, "مسودة")
+      : null,
+    React.createElement(
+      Text,
+      { style: styles.coverTitle },
+      input.coverTitleAr ?? input.titleAr,
+    ),
     React.createElement(View, { style: styles.coverDivider }),
-    React.createElement(Text, { style: styles.coverSubtitle }, input.coverSubtitleAr ?? ""),
-    React.createElement(Text, { style: styles.coverMeta },
-      `${input.cityNameAr} • الإصدار ${input.editionNumber}`)
+    React.createElement(
+      Text,
+      { style: styles.coverSubtitle },
+      input.coverSubtitleAr ?? "",
+    ),
+    React.createElement(
+      Text,
+      { style: styles.coverMeta },
+      `${input.cityNameAr} • الإصدار ${input.editionNumber}`,
+    ),
   );
 }
 
-// ── Divider page ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Divider page
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DividerPage({
-  section, styles, pageSize,
+  section,
+  styles,
+  pageSize,
 }: {
   section: PdfCategorySection;
   styles: ReturnType<typeof makeStyles>;
@@ -836,34 +928,27 @@ function DividerPage({
 }) {
   const icon = section.icon ?? getCategoryIcon(section.nameAr);
   return React.createElement(
-    Page, { size: pageSize, style: styles.dividerPage },
+    Page,
+    { size: pageSize, style: styles.dividerPage },
     React.createElement(Text, { style: styles.dividerIcon }, icon),
-    React.createElement(Text, { style: styles.dividerTitle }, section.sectionTitleAr ?? section.nameAr),
-    React.createElement(View, { style: styles.dividerAccentBar })
+    React.createElement(
+      Text,
+      { style: styles.dividerTitle },
+      section.sectionTitleAr ?? section.nameAr,
+    ),
+    React.createElement(View, { style: styles.dividerAccentBar }),
   );
 }
 
-// ── Page-number index ──────────────────────────────────────────────────────────────────
-/**
- * Builds the index entries using the same buildSectionPageMap so the
- * page numbers in the index are always in sync with ad placement.
- */
-function buildIndexEntries(sections: PdfCategorySection[], hasIntro: boolean) {
-  const pageMap = buildSectionPageMap(sections, hasIntro);
-  return sections.map((sec, idx) => {
-    const contentPage = pageMap.get(idx) ?? 0;
-    return {
-      categoryId: sec.categoryId,
-      nameAr: sec.nameAr,
-      icon: sec.icon ?? getCategoryIcon(sec.nameAr),
-      contentPage,
-      businesses: sec.businesses.map((b) => ({ id: b.id, nameAr: b.nameAr, page: contentPage })),
-    };
-  });
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Fihris (page-number index)
+// ─────────────────────────────────────────────────────────────────────────────
 
 function PageNumberIndexPage({
-  sections, styles, pageSize, hasIntro,
+  sections,
+  styles,
+  pageSize,
+  hasIntro,
 }: {
   sections: PdfCategorySection[];
   styles: ReturnType<typeof makeStyles>;
@@ -872,30 +957,64 @@ function PageNumberIndexPage({
 }) {
   const entries = buildIndexEntries(sections, hasIntro);
   return React.createElement(
-    Page, { size: pageSize, style: styles.page },
+    Page,
+    { size: pageSize, style: styles.page },
     React.createElement(Text, { style: styles.indexTitle }, "الفهرس"),
     ...entries.flatMap((entry) => [
       React.createElement(
-        View, { key: `idx-cat-${entry.categoryId}`, style: styles.indexCategoryRow },
-        React.createElement(Text, { style: styles.indexPageNum }, `${entry.contentPage}`),
-        React.createElement(Text, { style: styles.indexCategoryName }, `${entry.icon}  ${entry.nameAr}`)
+        View,
+        {
+          key: `idx-cat-${entry.categoryId}`,
+          style: styles.indexCategoryRow,
+        },
+        React.createElement(
+          Text,
+          { style: styles.indexPageNum },
+          `${entry.contentPage}`,
+        ),
+        React.createElement(
+          Text,
+          { style: styles.indexCategoryName },
+          `${entry.icon}  ${entry.nameAr}`,
+        ),
       ),
       ...entry.businesses.map((b) =>
         React.createElement(
-          View, { key: `idx-biz-${b.id}`, style: styles.indexBusinessRow },
-          React.createElement(Text, { style: styles.indexBusinessPageNum }, `${b.page}`),
-          React.createElement(Text, { style: styles.indexBusinessName }, b.nameAr)
-        )
+          View,
+          { key: `idx-biz-${b.id}`, style: styles.indexBusinessRow },
+          React.createElement(
+            Text,
+            { style: styles.indexBusinessPageNum },
+            `${b.page}`,
+          ),
+          React.createElement(
+            Text,
+            { style: styles.indexBusinessName },
+            b.nameAr,
+          ),
+        ),
       ),
-    ])
+    ]),
   );
 }
 
-// ── Category section page ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Category section page
+// ─────────────────────────────────────────────────────────────────────────────
+
 function CategorySectionPage({
-  section, qrMap, styles, pageSize, includeQr,
-  layout, isPreview, sidebarAds, halfPageTopAd, halfPageBottomAd,
-  inlineAd, imageCache,
+  section,
+  qrMap,
+  styles,
+  pageSize,
+  includeQr,
+  layout,
+  isPreview,
+  sidebarAds,
+  halfPageTopAd,
+  halfPageBottomAd,
+  inlineAd,
+  imageCache,
 }: {
   section: PdfCategorySection;
   qrMap: Map<string, string>;
@@ -921,97 +1040,136 @@ function CategorySectionPage({
 
   const headerBanner =
     inlineAd && placement === "HEADER_BANNER"
-      ? React.createElement(AdBannerElement, { ad: inlineAd, dataUri: adDataUri, styles })
+      ? React.createElement(AdBannerElement, {
+          ad: inlineAd,
+          dataUri: adDataUri,
+          styles,
+        })
       : null;
 
   const footerBanner =
     inlineAd && placement === "FOOTER_BANNER"
-      ? React.createElement(AdBannerElement, { ad: inlineAd, dataUri: adDataUri, styles })
+      ? React.createElement(AdBannerElement, {
+          ad: inlineAd,
+          dataUri: adDataUri,
+          styles,
+        })
       : null;
 
   const hasSidebar = sidebarAds.length > 0;
+  const sidebarPlacement =
+    sidebarAds[0]?.effectivePlacement ?? "SIDEBAR_RIGHT";
 
   const businessList = isDense
-    ? React.createElement(View, { style: styles.denseGrid },
+    ? React.createElement(
+        View,
+        { style: styles.denseGrid },
         ...section.businesses.map((b) =>
-          React.createElement(BusinessCardDense, { key: b.id, business: b, styles })))
-    : React.createElement(View, { style: { flex: 1 } },
+          React.createElement(BusinessCardDense, { key: b.id, business: b, styles }),
+        ),
+      )
+    : React.createElement(
+        View,
+        { style: { flex: 1 } },
         ...section.businesses.map((b) =>
           React.createElement(BusinessCardStandard, {
-            key: b.id, business: b,
+            key: b.id,
+            business: b,
             qrDataUrl: qrMap.get(b.id),
-            styles, includeQr,
-          })));
-
-  const sidebarPlacement = sidebarAds[0]?.effectivePlacement ?? "SIDEBAR_RIGHT";
+            styles,
+            includeQr,
+          }),
+        ),
+      );
 
   const contentArea = hasSidebar
     ? React.createElement(
-        View, {
+        View,
+        {
           style: {
             display: "flex",
-            flexDirection: sidebarPlacement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
+            flexDirection:
+              sidebarPlacement === "SIDEBAR_LEFT" ? "row" : "row-reverse",
             alignItems: "stretch",
             gap: 8,
             flex: 1,
           },
         },
         businessList,
-        React.createElement(AdSidebarElement, { ads: sidebarAds, styles, imageCache })
+        React.createElement(AdSidebarElement, { ads: sidebarAds, styles, imageCache }),
       )
     : businessList;
 
-  const halfTopBlock = halfPageTopAd
-    ? React.createElement(AdHalfPageBlock, {
-        ad: halfPageTopAd,
-        dataUri: resolveAdImage(halfPageTopAd, imageCache),
-        styles,
-      })
-    : null;
-
-  const halfBottomBlock = halfPageBottomAd
-    ? React.createElement(AdHalfPageBlock, {
-        ad: halfPageBottomAd,
-        dataUri: resolveAdImage(halfPageBottomAd, imageCache),
-        styles,
-      })
-    : null;
-
   return React.createElement(
-    Page, { size: pageSize, style: styles.page },
-    isPreview ? React.createElement(Text, { style: styles.watermark }, "مسودة") : null,
+    Page,
+    { size: pageSize, style: styles.page },
+    isPreview
+      ? React.createElement(Text, { style: styles.watermark }, "مسودة")
+      : null,
     headerBanner,
     React.createElement(
-      View, {
+      View,
+      {
         style: [
           section.colorTheme
             ? { ...styles.sectionHeader, backgroundColor: section.colorTheme }
             : styles.sectionHeader,
-          { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+          {
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          },
         ] as never,
       },
       sponsorBadge,
-      React.createElement(Text, { style: styles.sectionHeaderText }, section.sectionTitleAr ?? section.nameAr)
+      React.createElement(
+        Text,
+        { style: styles.sectionHeaderText },
+        section.sectionTitleAr ?? section.nameAr,
+      ),
     ),
     section.sectionIntroAr
-      ? React.createElement(Text, { style: styles.sectionIntro }, section.sectionIntroAr)
+      ? React.createElement(
+          Text,
+          { style: styles.sectionIntro },
+          section.sectionIntroAr,
+        )
       : null,
-    halfTopBlock,
+    halfPageTopAd
+      ? React.createElement(AdHalfPageBlock, {
+          ad: halfPageTopAd,
+          dataUri: resolveAdImage(halfPageTopAd, imageCache),
+          styles,
+        })
+      : null,
     contentArea,
-    halfBottomBlock,
+    halfPageBottomAd
+      ? React.createElement(AdHalfPageBlock, {
+          ad: halfPageBottomAd,
+          dataUri: resolveAdImage(halfPageBottomAd, imageCache),
+          styles,
+        })
+      : null,
     footerBanner,
     layout.showPageNumbers
       ? React.createElement(Text, {
           style: styles.pageNumber,
           render: ({ pageNumber }: { pageNumber: number }) => `${pageNumber}`,
         })
-      : null
+      : null,
   );
 }
 
-// ── Business card components ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Business card components
+// ─────────────────────────────────────────────────────────────────────────────
+
 function BusinessCardStandard({
-  business, qrDataUrl, styles, includeQr,
+  business,
+  qrDataUrl,
+  styles,
+  includeQr,
 }: {
   business: PdfBusiness;
   qrDataUrl: string | undefined;
@@ -1019,148 +1177,275 @@ function BusinessCardStandard({
   includeQr: boolean;
 }) {
   const phones = business.phoneNumbers ?? [];
-  const phoneSection = phones.length > 0
-    ? React.createElement(View, { style: styles.phoneRow },
-        ...phones.map((p, i) =>
-          React.createElement(View, { key: `${p.number}-${i}`, style: styles.phoneChip },
-            React.createElement(Text, { style: styles.phoneText }, p.number))))
-    : null;
+  const phoneSection =
+    phones.length > 0
+      ? React.createElement(
+          View,
+          { style: styles.phoneRow },
+          ...phones.map((p, i) =>
+            React.createElement(
+              View,
+              { key: `${p.number}-${i}`, style: styles.phoneChip },
+              React.createElement(Text, { style: styles.phoneText }, p.number),
+            ),
+          ),
+        )
+      : null;
 
-  // QR on the LEFT side (RTL: info flows right→left, QR anchors on left)
-  const qrSection = includeQr && qrDataUrl
-    ? wrapWithLink(
-        business.publicUrl,
-        React.createElement(
-          View, { style: { alignItems: "center", marginTop: 4 } },
-          React.createElement(Image, { src: qrDataUrl, style: styles.qrImage }),
-          React.createElement(Text, { style: styles.qrHint }, "اضغط هنا\nلترى المزيد من\nالمعلومات")
-        ),
-        { alignItems: "center" }
-      )
-    : null;
+  const qrSection =
+    includeQr && qrDataUrl
+      ? wrapWithLink(
+          business.publicUrl,
+          React.createElement(
+            View,
+            { style: { alignItems: "center", marginTop: 4 } },
+            React.createElement(Image, { src: qrDataUrl, style: styles.qrImage }),
+            React.createElement(
+              Text,
+              { style: styles.qrHint },
+              "اضغط هنا\nلترى المزيد من\nالمعلومات",
+            ),
+          ),
+          { alignItems: "center" },
+        )
+      : null;
 
   return React.createElement(
-    View, { style: styles.businessCard },
-    // row: QR on left, business info on right (RTL natural reading order)
-    React.createElement(View, { style: styles.qrContainer },
+    View,
+    { style: styles.businessCard },
+    React.createElement(
+      View,
+      { style: styles.qrContainer },
       qrSection,
-      React.createElement(View, { style: styles.businessInfo },
-        React.createElement(Text, { style: styles.businessName }, business.nameAr),
+      React.createElement(
+        View,
+        { style: styles.businessInfo },
+        React.createElement(
+          Text,
+          { style: styles.businessName },
+          business.nameAr,
+        ),
         business.addressAr
-          ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
+          ? React.createElement(
+              Text,
+              { style: styles.businessAddress },
+              business.addressAr,
+            )
           : null,
         business.descriptionAr
-          ? React.createElement(Text, { style: styles.businessDescription }, business.descriptionAr)
+          ? React.createElement(
+              Text,
+              { style: styles.businessDescription },
+              business.descriptionAr,
+            )
           : null,
-        phoneSection
-      )
-    )
+        phoneSection,
+      ),
+    ),
   );
 }
 
 function BusinessCardDense({
-  business, styles,
+  business,
+  styles,
 }: {
   business: PdfBusiness;
   styles: ReturnType<typeof makeStyles>;
 }) {
   const phones = business.phoneNumbers ?? [];
   return React.createElement(
-    View, { style: styles.denseCard },
+    View,
+    { style: styles.denseCard },
     React.createElement(Text, { style: styles.businessName }, business.nameAr),
     business.addressAr
-      ? React.createElement(Text, { style: styles.businessAddress }, business.addressAr)
+      ? React.createElement(
+          Text,
+          { style: styles.businessAddress },
+          business.addressAr,
+        )
       : null,
     ...phones.map((p, i) =>
-      React.createElement(Text, { key: `${business.id}-${p.number}-${i}`, style: styles.phoneText }, p.number))
+      React.createElement(
+        Text,
+        { key: `${business.id}-${p.number}-${i}`, style: styles.phoneText },
+        p.number,
+      ),
+    ),
   );
 }
 
-// ── Profile pages ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile pages
+// ─────────────────────────────────────────────────────────────────────────────
+
 function WebsiteProfilePage({
-  profile, styles, pageSize,
+  profile,
+  styles,
+  pageSize,
 }: {
   profile: PdfWebsiteProfile;
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
 }) {
   return React.createElement(
-    Page, { size: pageSize, style: styles.page },
-    React.createElement(View, { style: styles.profileBlock },
+    Page,
+    { size: pageSize, style: styles.page },
+    React.createElement(
+      View,
+      { style: styles.profileBlock },
       profile.logoUrl
         ? React.createElement(Image, {
             src: profile.logoUrl,
-            style: { width: 80, height: 40, objectFit: "contain", alignSelf: "flex-end", marginBottom: 8 },
+            style: {
+              width: 80,
+              height: 40,
+              objectFit: "contain",
+              alignSelf: "flex-end",
+              marginBottom: 8,
+            },
           })
         : null,
-      React.createElement(Text, { style: styles.profileTitle }, profile.titleAr),
-      profile.shortTextAr ? React.createElement(Text, { style: styles.profileBody }, profile.shortTextAr) : null,
-      profile.bodyTextAr  ? React.createElement(Text, { style: styles.profileBody }, profile.bodyTextAr)  : null,
-      profile.websiteUrl  ? React.createElement(Text, { style: styles.profileMeta }, `الموقع: ${profile.websiteUrl}`) : null,
-      profile.supportPhone? React.createElement(Text, { style: styles.profileMeta }, `الدعم: ${profile.supportPhone}`) : null,
+      React.createElement(
+        Text,
+        { style: styles.profileTitle },
+        profile.titleAr,
+      ),
+      profile.shortTextAr
+        ? React.createElement(
+            Text,
+            { style: styles.profileBody },
+            profile.shortTextAr,
+          )
+        : null,
+      profile.bodyTextAr
+        ? React.createElement(
+            Text,
+            { style: styles.profileBody },
+            profile.bodyTextAr,
+          )
+        : null,
+      profile.websiteUrl
+        ? React.createElement(
+            Text,
+            { style: styles.profileMeta },
+            `الموقع: ${profile.websiteUrl}`,
+          )
+        : null,
+      profile.supportPhone
+        ? React.createElement(
+            Text,
+            { style: styles.profileMeta },
+            `الدعم: ${profile.supportPhone}`,
+          )
+        : null,
       profile.qrCodeUrl
         ? React.createElement(Image, {
             src: profile.qrCodeUrl,
-            style: { width: 64, height: 64, alignSelf: "flex-end", marginTop: 8 },
+            style: {
+              width: 64,
+              height: 64,
+              alignSelf: "flex-end",
+              marginTop: 8,
+            },
           })
-        : null
-    )
+        : null,
+    ),
   );
 }
 
 function DeveloperProfilePage({
-  profile, styles, pageSize,
+  profile,
+  styles,
+  pageSize,
 }: {
   profile: PdfDeveloperProfile;
   styles: ReturnType<typeof makeStyles>;
   pageSize: "A4" | "LETTER";
 }) {
   return React.createElement(
-    Page, { size: pageSize, style: styles.page },
-    React.createElement(View, { style: styles.profileBlock },
+    Page,
+    { size: pageSize, style: styles.page },
+    React.createElement(
+      View,
+      { style: styles.profileBlock },
       profile.profileImageUrl
         ? React.createElement(Image, {
             src: profile.profileImageUrl,
-            style: { width: 60, height: 60, borderRadius: 30, alignSelf: "flex-end", marginBottom: 8 },
+            style: {
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              alignSelf: "flex-end",
+              marginBottom: 8,
+            },
           })
         : null,
-      React.createElement(Text, { style: styles.profileTitle }, profile.fullName),
-      profile.roleTitleAr ? React.createElement(Text, { style: styles.profileMeta }, profile.roleTitleAr) : null,
-      profile.shortBioAr  ? React.createElement(Text, { style: styles.profileBody }, profile.shortBioAr)  : null,
-      profile.ctaTextAr   ? React.createElement(Text, { style: styles.profileMeta }, profile.ctaTextAr)   : null
-    )
+      React.createElement(
+        Text,
+        { style: styles.profileTitle },
+        profile.fullName,
+      ),
+      profile.roleTitleAr
+        ? React.createElement(
+            Text,
+            { style: styles.profileMeta },
+            profile.roleTitleAr,
+          )
+        : null,
+      profile.shortBioAr
+        ? React.createElement(
+            Text,
+            { style: styles.profileBody },
+            profile.shortBioAr,
+          )
+        : null,
+      profile.ctaTextAr
+        ? React.createElement(
+            Text,
+            { style: styles.profileMeta },
+            profile.ctaTextAr,
+          )
+        : null,
+    ),
   );
 }
 
-// ── Main document builder ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main document builder
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function buildDocument(input: PdfDocumentInput) {
   registerFonts();
   const styles = makeStyles(input.theme, input.margins);
 
+  // Sort sections and businesses alphabetically (Arabic)
   const sortedSections = [...input.categorySections]
     .sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar"))
     .map((sec) => ({
       ...sec,
-      businesses: [...sec.businesses].sort((a, b) => a.nameAr.localeCompare(b.nameAr, "ar")),
+      businesses: [...sec.businesses].sort((a, b) =>
+        a.nameAr.localeCompare(b.nameAr, "ar"),
+      ),
     }));
 
-  // ── QR codes
+  // Build QR codes
   const qrMap = new Map<string, string>();
   if (input.includeQrCodes) {
     await Promise.all(
       sortedSections.flatMap((s) =>
         s.businesses.map(async (b) => {
           qrMap.set(b.id, await buildQrDataUrl(b.publicUrl));
-        })
-      )
+        }),
+      ),
     );
   }
 
-  // ── Phase 5: filter inactive ads
+  // Filter inactive ads and pre-load images
   const activeAds = input.ads.filter((a) => a.isActive !== false);
   const imageCache = await buildImageCache(activeAds);
 
-  // ── Partition ads
+  // ── Partition ads by placement type ────────────────────────────────────────
+
   const standaloneAds = activeAds
     .filter((a) => isStandalonePage(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
@@ -1169,10 +1454,9 @@ async function buildDocument(input: PdfDocumentInput) {
     .filter((a) => isInlinePlacement(a.effectivePlacement))
     .sort((a, b) => b.priority - a.priority);
 
-  // ── Pinned standalone ads (positionAfterCategoryId set)
+  // Pinned standalone ads (positionAfterCategoryId set)
   const pinnedStandalone = new Map<string, PdfAdData[]>();
   const floatingStandalone: PdfAdData[] = [];
-
   for (const ad of standaloneAds) {
     const pin = ad.positionAfterCategoryId;
     if (pin) {
@@ -1184,7 +1468,7 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   }
 
-  // ── Pinned inline ads
+  // Pinned inline ads
   const pinnedInline     = new Map<string, PdfAdData>();
   const pinnedSidebar    = new Map<string, PdfAdData[]>();
   const pinnedHalfTop    = new Map<string, PdfAdData>();
@@ -1220,28 +1504,31 @@ async function buildDocument(input: PdfDocumentInput) {
     }
   }
 
-  // ── Floating counters — true round-robin, advance unconditionally
-  let floatSIdx    = 0;  // FULL_PAGE standalone
-  let floatIIdx    = 0;  // HEADER/FOOTER/SPONSOR inline
-  let floatHTIdx   = 0;  // HALF_PAGE_TOP
-  let floatHBIdx   = 0;  // HALF_PAGE_BOTTOM
-  let floatSBStart = 0;  // SIDEBAR start pointer
+  // Round-robin counters — advance unconditionally so ads rotate
+  let floatSIdx    = 0; // FULL_PAGE
+  let floatIIdx    = 0; // HEADER/FOOTER/SPONSOR
+  let floatHTIdx   = 0; // HALF_PAGE_TOP
+  let floatHBIdx   = 0; // HALF_PAGE_BOTTOM
+  let floatSBStart = 0; // SIDEBAR
 
   const hasIntro = !!input.introTextAr;
-
-  // ── Build section→page map ONCE — shared by index renderer and adAllowedInSection
-  const sectionPageMap = buildSectionPageMap(sortedSections, hasIntro);
-
   const pages: React.ReactElement[] = [];
+
+  // ── Pages ──────────────────────────────────────────────────────────────────
 
   pages.push(React.createElement(CoverPage, { key: "cover", input, styles }));
 
   if (hasIntro) {
     pages.push(
       React.createElement(
-        Page, { key: "intro", size: input.pageSize, style: styles.page },
-        React.createElement(Text, { style: styles.introText }, input.introTextAr)
-      )
+        Page,
+        { key: "intro", size: input.pageSize, style: styles.page },
+        React.createElement(
+          Text,
+          { style: styles.introText },
+          input.introTextAr,
+        ),
+      ),
     );
   }
 
@@ -1252,44 +1539,46 @@ async function buildDocument(input: PdfDocumentInput) {
       styles,
       pageSize: input.pageSize,
       hasIntro,
-    })
+    }),
   );
 
   sortedSections.forEach((section, idx) => {
+    // ── Divider page
     pages.push(
       React.createElement(DividerPage, {
         key: `divider-${section.categoryId}`,
-        section, styles, pageSize: input.pageSize,
-      })
+        section,
+        styles,
+        pageSize: input.pageSize,
+      }),
     );
 
-    // ─ Inline ad (HEADER_BANNER / FOOTER_BANNER / CATEGORY_SPONSOR)
+    // ── Resolve inline ad (HEADER_BANNER / FOOTER_BANNER / CATEGORY_SPONSOR)
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       const ad = pinnedInline.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, sectionPageMap)) sectionInlineAd = ad;
+      if (adAllowedInSection(ad, idx)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
-      const startIdx = floatIIdx;
+      const candidate = floatingInline[floatIIdx];
       floatIIdx = (floatIIdx + 1) % floatingInline.length;
-      const candidate = floatingInline[startIdx];
-      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
+      if (candidate && adAllowedInSection(candidate, idx)) {
         sectionInlineAd = candidate;
       }
     }
 
-    // ─ Sidebar ads — true round-robin, advance pointer every section
+    // ── Resolve sidebar ads — round-robin, up to 3 per section
     let activeSidebarAds: PdfAdData[] = [];
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
         .get(section.categoryId)!
-        .filter((ad) => adAllowedInSection(ad, idx, sectionPageMap));
+        .filter((ad) => adAllowedInSection(ad, idx));
     } else if (floatingSidebar.length > 0) {
-      const maxSidebarAds = 3;
+      const MAX = 3;
       const total = floatingSidebar.length;
       const collected: PdfAdData[] = [];
-      for (let i = 0; i < total && collected.length < maxSidebarAds; i++) {
+      for (let i = 0; i < total && collected.length < MAX; i++) {
         const candidate = floatingSidebar[(floatSBStart + i) % total];
-        if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
+        if (candidate && adAllowedInSection(candidate, idx)) {
           collected.push(candidate);
         }
       }
@@ -1297,36 +1586,40 @@ async function buildDocument(input: PdfDocumentInput) {
       floatSBStart = (floatSBStart + 1) % total;
     }
 
-    // ─ Half-page top
+    // ── Resolve half-page top
     let halfTopAd: PdfAdData | null = null;
     if (pinnedHalfTop.has(section.categoryId)) {
       const ad = pinnedHalfTop.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, sectionPageMap)) halfTopAd = ad;
+      if (adAllowedInSection(ad, idx)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0 && idx % 2 === 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
       floatHTIdx++;
-      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
+      if (candidate && adAllowedInSection(candidate, idx)) {
         halfTopAd = candidate;
       }
     }
 
-    // ─ Half-page bottom
+    // ── Resolve half-page bottom
     let halfBottomAd: PdfAdData | null = null;
     if (pinnedHalfBottom.has(section.categoryId)) {
       const ad = pinnedHalfBottom.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, sectionPageMap)) halfBottomAd = ad;
+      if (adAllowedInSection(ad, idx)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0 && idx % 2 === 1) {
-      const candidate = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
+      const candidate =
+        floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
       floatHBIdx++;
-      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
+      if (candidate && adAllowedInSection(candidate, idx)) {
         halfBottomAd = candidate;
       }
     }
 
+    // ── Content page
     pages.push(
       React.createElement(CategorySectionPage, {
         key: `section-${section.categoryId}`,
-        section, qrMap, styles,
+        section,
+        qrMap,
+        styles,
         pageSize: input.pageSize,
         includeQr: input.includeQrCodes,
         layout: input.layout,
@@ -1336,24 +1629,26 @@ async function buildDocument(input: PdfDocumentInput) {
         halfPageTopAd: halfTopAd,
         halfPageBottomAd: halfBottomAd,
         imageCache,
-      })
+      }),
     );
 
-    // ─ Pinned FULL_PAGE ads after this section
+    // ── Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
-      if (ad && adAllowedInSection(ad, idx, sectionPageMap)) {
+      if (ad && adAllowedInSection(ad, idx)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-pinned-${ad.id}`,
-            ad, dataUri: resolveAdImage(ad, imageCache),
-            styles, pageSize: input.pageSize,
-          })
+            ad,
+            dataUri: resolveAdImage(ad, imageCache),
+            styles,
+            pageSize: input.pageSize,
+          }),
         );
       }
     }
 
-    // ─ Floating FULL_PAGE ads — every 2 sections
+    // ── Floating FULL_PAGE ads — every 2 sections, skip if pinned ad was placed
     if (
       floatingStandalone.length > 0 &&
       (idx + 1) % 2 === 0 &&
@@ -1361,13 +1656,15 @@ async function buildDocument(input: PdfDocumentInput) {
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
       floatSIdx++;
-      if (ad && adAllowedInSection(ad, idx, sectionPageMap)) {
+      if (ad && adAllowedInSection(ad, idx)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-float-${idx}`,
-            ad, dataUri: resolveAdImage(ad, imageCache),
-            styles, pageSize: input.pageSize,
-          })
+            ad,
+            dataUri: resolveAdImage(ad, imageCache),
+            styles,
+            pageSize: input.pageSize,
+          }),
         );
       }
     }
@@ -1378,26 +1675,32 @@ async function buildDocument(input: PdfDocumentInput) {
       React.createElement(WebsiteProfilePage, {
         key: "website-profile",
         profile: input.websiteProfile,
-        styles, pageSize: input.pageSize,
-      })
+        styles,
+        pageSize: input.pageSize,
+      }),
     );
   }
+
   if (input.includeDeveloperProfile && input.developerProfile) {
     pages.push(
       React.createElement(DeveloperProfilePage, {
         key: "dev-profile",
         profile: input.developerProfile,
-        styles, pageSize: input.pageSize,
-      })
+        styles,
+        pageSize: input.pageSize,
+      }),
     );
   }
 
   return React.createElement(Document, null, ...pages);
 }
 
-// ── Public entry point ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Public entry point
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function generatePdf(
-  input: PdfDocumentInput
+  input: PdfDocumentInput,
 ): Promise<GenerationResult> {
   try {
     const doc = await buildDocument(input);
@@ -1410,14 +1713,14 @@ export async function generatePdf(
       return { ok: false, error: `PDF render error: ${String(renderErr)}` };
     }
     const buffer = Buffer.from(await blob.arrayBuffer());
-    const pagesCount = pages_count(doc);
+    const pagesCount = countPages(doc);
     return {
       ok: true,
       buffer,
       pagesCount,
       businessesCount: input.categorySections.reduce(
         (sum, s) => sum + s.businesses.length,
-        0
+        0,
       ),
     };
   } catch (err) {
@@ -1427,11 +1730,10 @@ export async function generatePdf(
 }
 
 /** Count top-level Page elements in the document tree. */
-function pages_count(doc: React.ReactElement): number {
-  const children = (doc as any)?.props?.children; // eslint-disable-line @typescript-eslint/no-explicit-any
+function countPages(doc: React.ReactElement): number {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const children = (doc as any)?.props?.children;
   if (!children) return 0;
   const arr = Array.isArray(children) ? children : [children];
-  return arr.filter(
-    (c: React.ReactElement) => c?.type === Page
-  ).length;
+  return arr.filter((c: React.ReactElement) => c?.type === Page).length;
 }
