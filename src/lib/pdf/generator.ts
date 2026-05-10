@@ -28,8 +28,9 @@
  * ✔ Fix: guard undefined ad picks in all floating round-robin loops
  * ✔ Fix: adAllowedInSection coerces pageNumbers to Number (guards Int[] → string via JSON)
  * ✔ Fix: round-robin counters advance unconditionally so ads rotate across ALL sections
- * ✔ Fix: pageNumbers now compared against actual PDF page number of the section
- *         content page, not the 0-based section index
+ * ✔ Fix: buildSectionPageMap() is now the single source of truth for section→page mapping.
+ *         adAllowedInSection receives the pre-built map and does a simple lookup with ±1
+ *         tolerance — the old idx*2+4/idx*2+5 formula is gone completely.
  */
 
 import React from "react";
@@ -595,52 +596,69 @@ function isInlinePlacement(placement: string): boolean {
   ].includes(placement);
 }
 
+// ── Section → PDF page map (single source of truth) ─────────────────────────────────────
+/**
+ * Builds a map from section index → the PDF content page number for that section.
+ *
+ * PDF structure:
+ *   Page 1              = Cover
+ *   Page 2              = Intro  (only when hasIntro = true)
+ *   Page 2 or 3         = Index
+ *   Then for each section:
+ *     odd  page = Divider
+ *     even page = Content   ← this is what the admin enters in pageNumbers
+ *
+ * This is the ONLY place in the file that knows the page layout formula.
+ * Both the Index renderer and adAllowedInSection use this map.
+ */
+function buildSectionPageMap(
+  sections: PdfCategorySection[],
+  hasIntro: boolean,
+): Map<number, number> {
+  // pageCounter starts after: Cover (1) + optional Intro (1) + Index (1)
+  let pageCounter = hasIntro ? 3 : 2;
+  const map = new Map<number, number>();
+  sections.forEach((_section, idx) => {
+    pageCounter++; // divider page
+    const contentPage = ++pageCounter; // content page
+    map.set(idx, contentPage);
+  });
+  return map;
+}
+
 /**
  * Returns true if this ad is allowed to appear in the given section.
  *
  * pageNumbers stores 1-based PDF page numbers as entered by the admin.
- * Empty array → show in ALL sections.
+ * Empty array → show in ALL sections (round-robin).
  *
- * PDF page layout (with intro page):
- *   1 = Cover
- *   2 = Intro
- *   3 = Index
- *   4 = Divider for section 0
- *   5 = Content for section 0  ← idx=0
- *   6 = Divider for section 1
- *   7 = Content for section 1  ← idx=1
- *   ...
- *   contentPageForIdx = hasIntro ? (idx * 2 + 5) : (idx * 2 + 4)
+ * We look up the section's actual content page from the pre-built map
+ * and check whether any of the ad's target pages matches it.
  *
- * Without intro page:
- *   1 = Cover
- *   2 = Index
- *   3 = Divider for section 0
- *   4 = Content for section 0  ← idx=0
- *   ...
- *   contentPageForIdx = idx * 2 + 4
+ * A ±1 tolerance is applied so that entering the DIVIDER page (one before
+ * the content page) also works — useful when the admin is unsure which
+ * page is the divider vs. the content page.
  *
- * We compare the admin-entered PDF page number against this computed value.
- * We also accept the section index directly (legacy / 0-based) as a fallback
- * so existing data keeps working.
- *
- * FIX: coerce each entry to Number() to guard against JSON serialisation
- * turning Int[] into string[] when data crosses a Server Action boundary.
+ * FIX: replaces the broken idx*2+4 / idx*2+5 formula that only matched
+ * even or only odd page numbers respectively.
  */
 function adAllowedInSection(
   ad: PdfAdData,
   sectionIdx: number,
-  hasIntro: boolean
+  sectionPageMap: Map<number, number>,
 ): boolean {
   if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
-  const nums = ad.pageNumbers.map(Number).filter((n) => !isNaN(n));
+
+  const nums = ad.pageNumbers
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
   if (nums.length === 0) return true;
 
-  // Compute actual PDF content-page number for this section index
-  const contentPdfPage = hasIntro ? sectionIdx * 2 + 5 : sectionIdx * 2 + 4;
+  const contentPage = sectionPageMap.get(sectionIdx);
+  if (contentPage === undefined) return false;
 
-  // Accept either the PDF page number OR the raw section index (0-based legacy)
-  return nums.includes(contentPdfPage) || nums.includes(sectionIdx);
+  // Accept exact match OR the divider page (contentPage - 1)
+  return nums.includes(contentPage) || nums.includes(contentPage - 1);
 }
 
 // ── Resolved image cache ──────────────────────────────────────────────────────────────────
@@ -826,11 +844,14 @@ function DividerPage({
 }
 
 // ── Page-number index ──────────────────────────────────────────────────────────────────
-function buildPageMap(sections: PdfCategorySection[], hasIntro: boolean) {
-  let pageCounter = hasIntro ? 3 : 2;
-  return sections.map((sec) => {
-    pageCounter++;
-    const contentPage = ++pageCounter;
+/**
+ * Builds the index entries using the same buildSectionPageMap so the
+ * page numbers in the index are always in sync with ad placement.
+ */
+function buildIndexEntries(sections: PdfCategorySection[], hasIntro: boolean) {
+  const pageMap = buildSectionPageMap(sections, hasIntro);
+  return sections.map((sec, idx) => {
+    const contentPage = pageMap.get(idx) ?? 0;
     return {
       categoryId: sec.categoryId,
       nameAr: sec.nameAr,
@@ -849,11 +870,11 @@ function PageNumberIndexPage({
   pageSize: "A4" | "LETTER";
   hasIntro: boolean;
 }) {
-  const pageMap = buildPageMap(sections, hasIntro);
+  const entries = buildIndexEntries(sections, hasIntro);
   return React.createElement(
     Page, { size: pageSize, style: styles.page },
     React.createElement(Text, { style: styles.indexTitle }, "الفهرس"),
-    ...pageMap.flatMap((entry) => [
+    ...entries.flatMap((entry) => [
       React.createElement(
         View, { key: `idx-cat-${entry.categoryId}`, style: styles.indexCategoryRow },
         React.createElement(Text, { style: styles.indexPageNum }, `${entry.contentPage}`),
@@ -1207,6 +1228,10 @@ async function buildDocument(input: PdfDocumentInput) {
   let floatSBStart = 0;  // SIDEBAR start pointer
 
   const hasIntro = !!input.introTextAr;
+
+  // ── Build section→page map ONCE — shared by index renderer and adAllowedInSection
+  const sectionPageMap = buildSectionPageMap(sortedSections, hasIntro);
+
   const pages: React.ReactElement[] = [];
 
   pages.push(React.createElement(CoverPage, { key: "cover", input, styles }));
@@ -1242,12 +1267,12 @@ async function buildDocument(input: PdfDocumentInput) {
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       const ad = pinnedInline.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, hasIntro)) sectionInlineAd = ad;
+      if (adAllowedInSection(ad, idx, sectionPageMap)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
       const startIdx = floatIIdx;
       floatIIdx = (floatIIdx + 1) % floatingInline.length;
       const candidate = floatingInline[startIdx];
-      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
+      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
         sectionInlineAd = candidate;
       }
     }
@@ -1257,14 +1282,14 @@ async function buildDocument(input: PdfDocumentInput) {
     if (pinnedSidebar.has(section.categoryId)) {
       activeSidebarAds = pinnedSidebar
         .get(section.categoryId)!
-        .filter((ad) => adAllowedInSection(ad, idx, hasIntro));
+        .filter((ad) => adAllowedInSection(ad, idx, sectionPageMap));
     } else if (floatingSidebar.length > 0) {
       const maxSidebarAds = 3;
       const total = floatingSidebar.length;
       const collected: PdfAdData[] = [];
       for (let i = 0; i < total && collected.length < maxSidebarAds; i++) {
         const candidate = floatingSidebar[(floatSBStart + i) % total];
-        if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
+        if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
           collected.push(candidate);
         }
       }
@@ -1276,11 +1301,11 @@ async function buildDocument(input: PdfDocumentInput) {
     let halfTopAd: PdfAdData | null = null;
     if (pinnedHalfTop.has(section.categoryId)) {
       const ad = pinnedHalfTop.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, hasIntro)) halfTopAd = ad;
+      if (adAllowedInSection(ad, idx, sectionPageMap)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0 && idx % 2 === 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
       floatHTIdx++;
-      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
+      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
         halfTopAd = candidate;
       }
     }
@@ -1289,11 +1314,11 @@ async function buildDocument(input: PdfDocumentInput) {
     let halfBottomAd: PdfAdData | null = null;
     if (pinnedHalfBottom.has(section.categoryId)) {
       const ad = pinnedHalfBottom.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx, hasIntro)) halfBottomAd = ad;
+      if (adAllowedInSection(ad, idx, sectionPageMap)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0 && idx % 2 === 1) {
       const candidate = floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
       floatHBIdx++;
-      if (candidate && adAllowedInSection(candidate, idx, hasIntro)) {
+      if (candidate && adAllowedInSection(candidate, idx, sectionPageMap)) {
         halfBottomAd = candidate;
       }
     }
@@ -1317,7 +1342,7 @@ async function buildDocument(input: PdfDocumentInput) {
     // ─ Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
-      if (ad && adAllowedInSection(ad, idx, hasIntro)) {
+      if (ad && adAllowedInSection(ad, idx, sectionPageMap)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-pinned-${ad.id}`,
@@ -1336,7 +1361,7 @@ async function buildDocument(input: PdfDocumentInput) {
     ) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
       floatSIdx++;
-      if (ad && adAllowedInSection(ad, idx, hasIntro)) {
+      if (ad && adAllowedInSection(ad, idx, sectionPageMap)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-float-${idx}`,
