@@ -1654,7 +1654,7 @@ async function buildDocument(input: PdfDocumentInput) {
       );
 
       // ── Keep both sidebar sides independent.
-      // A RIGHT ad must not suppress a LEFT ad that targets the same page.
+      // A RIGHT ad must not suppress a LEFT ad that targets the same section.
       // CategorySectionPage splits this combined list back into left/right columns.
       activeSidebarAds = [...collectedLeft, ...collectedRight];
     }

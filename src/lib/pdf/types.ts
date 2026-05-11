@@ -136,8 +136,8 @@ export interface PdfAdData {
    */
   positionAfterCategoryId?: string | null;
   /**
-   * Specific PDF page numbers (1-based) where this ad should appear.
-   * Empty array = show wherever the placement is otherwise applicable.
+   * Specific section numbers (1-based) where this ad should appear.
+   * Empty array = show in every section (round-robin).
    * Populated from PdfEditionAd.pageNumbers.
    */
   pageNumbers: number[];

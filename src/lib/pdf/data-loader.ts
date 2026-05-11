@@ -236,7 +236,7 @@ export async function loadPdfEditionData(
   //
   // Priority source: PdfEditionAd.priority (set by admin via ↑↓ or manual input)
   // effectivePlacement: overridePlacement if set, otherwise ad.placementType
-  // pageNumbers: PDF page numbers (1-based) where this ad should appear; [] = all
+  // pageNumbers: section numbers (1-based) where this ad should appear; [] = all
   // isActive: already filtered in the Prisma query above
   const ads: PdfAdData[] = edition.editionAds.map((ea) => ({
     id: ea.ad.id,

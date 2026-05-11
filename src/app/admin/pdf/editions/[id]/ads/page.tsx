@@ -76,7 +76,7 @@ export default async function EditionAdsPage({
       {/* ══════════════════════════════════════════════════════════════════ */}
       <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900 dark:bg-blue-950/95">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-300">
-          <span>📖</span> دليل الحقول — فهم الفرق بين الصفحات والأولوية والترتيب
+          <span>📖</span> دليل الحقول — فهم الفرق بين الأقسام والأولوية والترتيب
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -90,20 +90,20 @@ export default async function EditionAdsPage({
             <tbody className="divide-y divide-blue-100 dark:divide-blue-900">
               <tr>
                 <td className="py-2 pr-3 font-mono text-xs font-bold text-blue-700 dark:text-blue-400">
-                  الصفحات<br />
+                  الأقسام<br />
                   <span className="font-normal text-blue-500">pageNumbers</span>
                 </td>
                 <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
-                  أرقام <strong>صفحات PDF الفعلية</strong> (1 = أول صفحة في الملف).
+                  أرقام <strong>الأقسام داخل الإصدار</strong> (1 = أول قسم بعد الفهرس).
                   <br />
                   <span className="text-xs text-blue-600 dark:text-blue-400">
-                    مثال: الغلاف = 1، الفهرس = 2 أو 3 حسب وجود المقدمة، ثم صفحات الأقسام.
+                    مثال: 1 = القسم الأول، 2 = القسم الثاني، 3 = القسم الثالث.
                   </span>
                 </td>
                 <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
-                  تحديد <em>في أي صفحة</em> يظهر الإعلان داخل الـ PDF.
+                  تحديد <em>في أي قسم</em> يظهر الإعلان داخل الـ PDF.
                   <br />
-                  اتركها <strong>فارغة</strong> لإظهاره في كل الصفحات المناسبة تلقائياً.
+                  اتركها <strong>فارغة</strong> لإظهاره في كل الأقسام المناسبة تلقائياً.
                 </td>
               </tr>
               <tr>
@@ -210,8 +210,8 @@ export default async function EditionAdsPage({
                   <th className="px-3 py-3 font-semibold">الموضع الأصلي</th>
                   <th className="px-3 py-3 font-semibold">تجاوز الموضع</th>
                   <th className="px-3 py-3 font-semibold">
-                    صفحات PDF
-                    <span className="mr-1 text-xs font-normal text-muted-foreground">(فارغ = كل الصفحات)</span>
+                    أرقام الأقسام
+                    <span className="mr-1 text-xs font-normal text-muted-foreground">(فارغ = كل الأقسام)</span>
                   </th>
                   <th className="px-3 py-3 font-semibold">الأولوية</th>
                   <th className="px-3 py-3 font-semibold">فعّال</th>
@@ -322,20 +322,20 @@ export default async function EditionAdsPage({
                         </form>
                       </td>
 
-                      {/* ── PDF page numbers (1-based) ── */}
+                      {/* ── Section numbers (1-based; stored in pageNumbers for compatibility) ── */}
                       <td className="px-3 py-3">
                         <form
                           action={async (fd: FormData) => {
                             "use server";
                             const raw = (fd.get("pageNumbers") as string ?? "").trim();
-                            const pages = raw
+                            const sectionNumbers = raw
                               ? raw
                                   .split(",")
                                   .map((s) => parseInt(s.trim(), 10))
                                   .filter((n) => !isNaN(n) && n >= 1)
                               : [];
                             await updateEditionAd(ea.id, editionId, {
-                              pageNumbers: pages,
+                              pageNumbers: sectionNumbers,
                             });
                           }}
                           className="flex flex-col gap-1"
@@ -345,8 +345,8 @@ export default async function EditionAdsPage({
                               name="pageNumbers"
                               type="text"
                               defaultValue={ea.pageNumbers.join(", ")}
-                              placeholder="كل الصفحات"
-                              title="أرقام صفحات PDF الفعلية مفصولة بفاصلة — مثال: 5, 9, 11"
+                              placeholder="كل الأقسام"
+                              title="أرقام الأقسام مفصولة بفاصلة — مثال: 2, 4"
                               className="w-28 rounded border border-border bg-background px-2 py-1 text-sm"
                             />
                             <button
@@ -357,7 +357,7 @@ export default async function EditionAdsPage({
                             </button>
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            رقم صفحة PDF الفعلي
+                            رقم القسم داخل الإصدار
                           </span>
                         </form>
                       </td>
@@ -469,9 +469,9 @@ export default async function EditionAdsPage({
 
         <div className="mt-4 rounded-xl border border-border bg-secondary/10 px-4 py-3 text-xs text-muted-foreground">
           <p className="mb-1">
-            💡 <strong>صفحات PDF:</strong> أدخل أرقام الصفحات الفعلية مفصولة بفاصلة مثل{" "}
-            <span dir="ltr" className="font-mono">5, 9, 11</span>{" "}
-            — اتركها <strong>فارغة</strong> لإظهار الإعلان تلقائياً في كل الصفحات المناسبة.
+            💡 <strong>أرقام الأقسام:</strong> أدخل أرقام الأقسام مفصولة بفاصلة مثل{" "}
+            <span dir="ltr" className="font-mono">2, 4</span>{" "}
+            — اتركها <strong>فارغة</strong> لإظهار الإعلان تلقائياً في كل الأقسام المناسبة.
           </p>
           <p className="mb-1">
             💡 <strong>الأولوية:</strong> عند تنافس عدة إعلانات على نفس الموضع، يظهر صاحب الأولوية الأعلى أولاً.
