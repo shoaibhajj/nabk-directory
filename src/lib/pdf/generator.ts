@@ -135,7 +135,7 @@ function getAdHref(ad: PdfAdData): string | null {
 function wrapWithLink(
   href: string | null,
   child: React.ReactNode,
-  style?: unknown,
+  style?: any,
 ) {
   if (!href) return child;
   return React.createElement(Link, { src: href, style }, child);

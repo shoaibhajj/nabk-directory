@@ -74,7 +74,7 @@ export default async function EditionAdsPage({
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* دليل الحقول — جدول توضيحي                                         */}
       {/* ══════════════════════════════════════════════════════════════════ */}
-      <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900 dark:bg-blue-950/30">
+      <section className="mb-8 rounded-xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900 dark:bg-blue-950/80">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-blue-800 dark:text-blue-300">
           <span>📖</span> دليل الحقول — فهم الفرق بين الصفحات والأولوية والترتيب
         </h2>
