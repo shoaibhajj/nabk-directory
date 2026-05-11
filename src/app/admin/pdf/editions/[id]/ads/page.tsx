@@ -97,13 +97,13 @@ export default async function EditionAdsPage({
                   أرقام <strong>صفحات PDF الفعلية</strong> (1 = أول صفحة في الملف).
                   <br />
                   <span className="text-xs text-blue-600 dark:text-blue-400">
-                    مثال: الغلاف = 1، الفهرس = 2، أول قسم = 3 أو 4 حسب بنية الإصدار.
+                    مثال: الغلاف = 1، الفهرس = 2 أو 3 حسب وجود المقدمة، ثم صفحات الأقسام.
                   </span>
                 </td>
                 <td className="py-2 pr-3 text-blue-900 dark:text-blue-200">
                   تحديد <em>في أي صفحة</em> يظهر الإعلان داخل الـ PDF.
                   <br />
-                  اتركها <strong>فارغة</strong> لإظهاره في كل الصفحات تلقائياً.
+                  اتركها <strong>فارغة</strong> لإظهاره في كل الصفحات المناسبة تلقائياً.
                 </td>
               </tr>
               <tr>
@@ -322,7 +322,7 @@ export default async function EditionAdsPage({
                         </form>
                       </td>
 
-                      {/* ── Page numbers (real PDF pages, 1-based) ── */}
+                      {/* ── PDF page numbers (1-based) ── */}
                       <td className="px-3 py-3">
                         <form
                           action={async (fd: FormData) => {
@@ -346,7 +346,7 @@ export default async function EditionAdsPage({
                               type="text"
                               defaultValue={ea.pageNumbers.join(", ")}
                               placeholder="كل الصفحات"
-                              title="أرقام صفحات PDF الفعلية مفصولة بفاصلة — مثال: 5, 11"
+                              title="أرقام صفحات PDF الفعلية مفصولة بفاصلة — مثال: 5, 9, 11"
                               className="w-28 rounded border border-border bg-background px-2 py-1 text-sm"
                             />
                             <button
@@ -470,7 +470,7 @@ export default async function EditionAdsPage({
         <div className="mt-4 rounded-xl border border-border bg-secondary/10 px-4 py-3 text-xs text-muted-foreground">
           <p className="mb-1">
             💡 <strong>صفحات PDF:</strong> أدخل أرقام الصفحات الفعلية مفصولة بفاصلة مثل{" "}
-            <span dir="ltr" className="font-mono">5, 11</span>{" "}
+            <span dir="ltr" className="font-mono">5, 9, 11</span>{" "}
             — اتركها <strong>فارغة</strong> لإظهار الإعلان تلقائياً في كل الصفحات المناسبة.
           </p>
           <p className="mb-1">

@@ -14,31 +14,18 @@
  *
  * ## pageNumbers field — how it works (IMPORTANT)
  *
- * `pageNumbers` stores **1-based SECTION NUMBERS** entered by the admin in the
- * management UI.  These are NOT raw PDF page numbers — they are the position of
- * the category section in the sorted list (1 = first section, 2 = second, …).
- *
- * Why section numbers instead of PDF page numbers?
- *   @react-pdf/renderer does NOT expose real page numbers before the PDF is
- *   rendered, so we cannot know exact PDF page numbers at ad-placement time.
- *   Additionally every FULL_PAGE ad inserts an extra page, shifting all
- *   subsequent section page numbers — making static PDF page numbers unreliable.
- *   Section numbers are stable and match exactly what the admin sees in the UI.
- *
- * Examples:
- *   []        → show in ALL applicable sections (round-robin)
- *   [1]       → show only in the 1st section (sectionIdx === 0)
- *   [3, 5]    → show only in the 3rd and 5th sections
- *
- * The admin UI should label the input "رقم القسم" (section number), not
- * "رقم الصفحة" (page number), to avoid confusion.
+ * `pageNumbers` stores **1-based physical PDF page numbers** entered by the
+ * admin in the management UI. Empty array means the ad can appear wherever its
+ * placement is applicable. The generator tracks the page counter while building
+ * top-level pages so FULL_PAGE ads inserted after earlier sections shift later
+ * ad checks correctly.
  *
  * ## Other notes
  * - Images: fetched + resized via Sharp (no cropping, mozjpeg compression).
  * - QR code: clickable Link → business.publicUrl, positioned on LEFT (RTL).
  * - Business logo (media_files image) removed from card entirely.
  * - adHalfBlock / adBannerBlock wrapped in fixed-height Views.
- * - Round-robin counters advance unconditionally so ads rotate across ALL sections.
+ * - Explicit page-targeted sidebar ads are preferred over unrestricted sidebar ads.
  */
 
 import React from "react";
@@ -196,39 +183,48 @@ function buildPageMap(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// adAllowedInSection
+// adAllowedOnPdfPage
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Decides whether an ad should appear in a given section.
+ * Decides whether an ad should appear on a given physical PDF page.
  *
- * `pageNumbers` stores 1-based SECTION NUMBERS entered by the admin.
- * We compare them against `sectionIdx + 1` (converting 0-based to 1-based).
- *
- * - Empty array ([]): show in ALL sections — no restriction.
- * - [1]            : show only in section #1 (the first section, sectionIdx=0).
- * - [3, 5]         : show in sections #3 and #5.
- *
- * @param ad          The ad to check.
- * @param sectionIdx  Zero-based index of the current section in the sorted array.
+ * `pageNumbers` stores 1-based PDF page numbers entered by the admin.
+ * Empty array ([]): show everywhere the placement is otherwise applicable.
+ * Invalid values are ignored; if every value is invalid, the ad is unrestricted.
  */
-function adAllowedInSection(
-  ad: PdfAdData,
-  sectionIdx: number
-): boolean {
-  // No restriction — show everywhere.
+function adAllowedOnPdfPage(ad: PdfAdData, pdfPageNumber: number): boolean {
   if (!ad.pageNumbers || ad.pageNumbers.length === 0) return true;
 
-  // Coerce every entry to a finite positive integer.
-  const targetSections = ad.pageNumbers
+  const targetPages = ad.pageNumbers
     .map(Number)
     .filter((n) => Number.isFinite(n) && n >= 1);
 
-  // If all entries were invalid, treat as unrestricted.
-  if (targetSections.length === 0) return true;
+  if (targetPages.length === 0) return true;
 
-  // Admin enters 1-based section number; sectionIdx is 0-based.
-  return targetSections.includes(sectionIdx + 1);
+  return targetPages.includes(pdfPageNumber);
+}
+
+function adHasExplicitPages(ad: PdfAdData): boolean {
+  return (ad.pageNumbers ?? [])
+    .map(Number)
+    .some((n) => Number.isFinite(n) && n >= 1);
+}
+
+function collectSidebarAdsForPage(
+  ads: PdfAdData[],
+  pdfPageNumber: number,
+  maxAds = 2
+): PdfAdData[] {
+  return ads
+    .filter((ad) => adAllowedOnPdfPage(ad, pdfPageNumber))
+    .sort((a, b) => {
+      const explicitDelta =
+        Number(adHasExplicitPages(b)) - Number(adHasExplicitPages(a));
+      if (explicitDelta !== 0) return explicitDelta;
+      return b.priority - a.priority;
+    })
+    .slice(0, maxAds);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1580,8 +1576,6 @@ async function buildDocument(input: PdfDocumentInput) {
   let floatIIdx = 0; // HEADER/FOOTER/SPONSOR
   let floatHTIdx = 0; // HALF_PAGE_TOP
   let floatHBIdx = 0; // HALF_PAGE_BOTTOM
-  let floatSBRightStart = 0; // SIDEBAR_RIGHT
-  let floatSBLeftStart = 0; // SIDEBAR_LEFT
 
   const pages: React.ReactElement[] = [];
 
@@ -1613,6 +1607,8 @@ async function buildDocument(input: PdfDocumentInput) {
     })
   );
 
+  let pageCounter = hasIntro ? 3 : 2;
+
   sortedSections.forEach((section, idx) => {
     // ── Divider page
     pages.push(
@@ -1624,15 +1620,18 @@ async function buildDocument(input: PdfDocumentInput) {
       })
     );
 
+    pageCounter++; // divider page
+    const contentPageNumber = pageCounter + 1;
+
     // ── Resolve inline ad (HEADER_BANNER / FOOTER_BANNER / CATEGORY_SPONSOR)
     let sectionInlineAd: PdfAdData | null = null;
     if (pinnedInline.has(section.categoryId)) {
       const ad = pinnedInline.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) sectionInlineAd = ad;
+      if (adAllowedOnPdfPage(ad, contentPageNumber)) sectionInlineAd = ad;
     } else if (floatingInline.length > 0) {
       const candidate = floatingInline[floatIIdx];
       floatIIdx = (floatIIdx + 1) % floatingInline.length;
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedOnPdfPage(candidate, contentPageNumber)) {
         sectionInlineAd = candidate;
       }
     }
@@ -1643,49 +1642,21 @@ async function buildDocument(input: PdfDocumentInput) {
       // Pinned ads keep existing logic
       activeSidebarAds = pinnedSidebar
         .get(section.categoryId)!
-        .filter((ad) => adAllowedInSection(ad, idx));
+        .filter((ad) => adAllowedOnPdfPage(ad, contentPageNumber));
     } else {
-      // ── Collect RIGHT sidebar ads independently
-      const collectedRight: PdfAdData[] = [];
-      if (floatingSidebarRight.length > 0) {
-        const total = floatingSidebarRight.length;
-        for (let i = 0; i < total && collectedRight.length < 2; i++) {
-          const candidate =
-            floatingSidebarRight[(floatSBRightStart + i) % total];
-          if (candidate && adAllowedInSection(candidate, idx)) {
-            collectedRight.push(candidate);
-          }
-        }
-        floatSBRightStart = (floatSBRightStart + 1) % total;
-      }
+      const collectedRight = collectSidebarAdsForPage(
+        floatingSidebarRight,
+        contentPageNumber
+      );
+      const collectedLeft = collectSidebarAdsForPage(
+        floatingSidebarLeft,
+        contentPageNumber
+      );
 
-      // ── Collect LEFT sidebar ads independently
-      const collectedLeft: PdfAdData[] = [];
-      if (floatingSidebarLeft.length > 0) {
-        const total = floatingSidebarLeft.length;
-        for (let i = 0; i < total && collectedLeft.length < 2; i++) {
-          const candidate = floatingSidebarLeft[(floatSBLeftStart + i) % total];
-          if (candidate && adAllowedInSection(candidate, idx)) {
-            collectedLeft.push(candidate);
-          }
-        }
-        floatSBLeftStart = (floatSBLeftStart + 1) % total;
-      }
-
-      // ── One sidebar column only — winner decided by priority
-      if (collectedRight.length > 0 && collectedLeft.length > 0) {
-        // Both sides have ads → pick the side whose top ad has higher priority
-        const rightTopPriority = collectedRight[0].priority;
-        const leftTopPriority = collectedLeft[0].priority;
-        activeSidebarAds =
-          rightTopPriority >= leftTopPriority
-            ? collectedRight // RIGHT wins
-            : collectedLeft; // LEFT wins
-      } else {
-        // Only one side has ads — take whichever is populated
-        activeSidebarAds =
-          collectedRight.length > 0 ? collectedRight : collectedLeft;
-      }
+      // ── Keep both sidebar sides independent.
+      // A RIGHT ad must not suppress a LEFT ad that targets the same page.
+      // CategorySectionPage splits this combined list back into left/right columns.
+      activeSidebarAds = [...collectedLeft, ...collectedRight];
     }
 
     // ── Resolve half-page top
@@ -1693,11 +1664,11 @@ async function buildDocument(input: PdfDocumentInput) {
     let halfTopAd: PdfAdData | null = null;
     if (pinnedHalfTop.has(section.categoryId)) {
       const ad = pinnedHalfTop.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) halfTopAd = ad;
+      if (adAllowedOnPdfPage(ad, contentPageNumber)) halfTopAd = ad;
     } else if (floatingHalfTop.length > 0) {
       const candidate = floatingHalfTop[floatHTIdx % floatingHalfTop.length];
       floatHTIdx++;
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedOnPdfPage(candidate, contentPageNumber)) {
         halfTopAd = candidate;
       }
     }
@@ -1707,12 +1678,12 @@ async function buildDocument(input: PdfDocumentInput) {
     let halfBottomAd: PdfAdData | null = null;
     if (pinnedHalfBottom.has(section.categoryId)) {
       const ad = pinnedHalfBottom.get(section.categoryId)!;
-      if (adAllowedInSection(ad, idx)) halfBottomAd = ad;
+      if (adAllowedOnPdfPage(ad, contentPageNumber)) halfBottomAd = ad;
     } else if (floatingHalfBottom.length > 0) {
       const candidate =
         floatingHalfBottom[floatHBIdx % floatingHalfBottom.length];
       floatHBIdx++;
-      if (candidate && adAllowedInSection(candidate, idx)) {
+      if (candidate && adAllowedOnPdfPage(candidate, contentPageNumber)) {
         halfBottomAd = candidate;
       }
     }
@@ -1735,11 +1706,13 @@ async function buildDocument(input: PdfDocumentInput) {
         imageCache,
       })
     );
+    pageCounter = contentPageNumber;
 
     // ── Pinned FULL_PAGE ads after this section
     const pinnedHere = pinnedStandalone.get(section.categoryId) ?? [];
     for (const ad of pinnedHere) {
-      if (ad && adAllowedInSection(ad, idx)) {
+      const adPageNumber = pageCounter + 1;
+      if (ad && adAllowedOnPdfPage(ad, adPageNumber)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-pinned-${ad.id}`,
@@ -1749,6 +1722,7 @@ async function buildDocument(input: PdfDocumentInput) {
             pageSize: input.pageSize,
           })
         );
+        pageCounter = adPageNumber;
       }
     }
 
@@ -1756,7 +1730,8 @@ async function buildDocument(input: PdfDocumentInput) {
     if (idx % 2 === 1 && floatingStandalone.length > 0) {
       const ad = floatingStandalone[floatSIdx % floatingStandalone.length];
       floatSIdx++;
-      if (ad && adAllowedInSection(ad, idx)) {
+      const adPageNumber = pageCounter + 1;
+      if (ad && adAllowedOnPdfPage(ad, adPageNumber)) {
         pages.push(
           React.createElement(StandaloneAdPage, {
             key: `ad-float-${ad.id}-${idx}`,
@@ -1766,6 +1741,7 @@ async function buildDocument(input: PdfDocumentInput) {
             pageSize: input.pageSize,
           })
         );
+        pageCounter = adPageNumber;
       }
     }
   });
