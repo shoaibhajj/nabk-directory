@@ -1678,8 +1678,20 @@ async function buildDocument(input: PdfDocumentInput) {
         floatSBLeftStart = (floatSBLeftStart + 1) % total;
       }
 
-      // ── Merge: RIGHT ads first, then LEFT ads
-      activeSidebarAds = [...collectedRight, ...collectedLeft];
+      // ── One sidebar column only — winner decided by priority
+      if (collectedRight.length > 0 && collectedLeft.length > 0) {
+        // Both sides have ads → pick the side whose top ad has higher priority
+        const rightTopPriority = collectedRight[0].priority;
+        const leftTopPriority = collectedLeft[0].priority;
+        activeSidebarAds =
+          rightTopPriority >= leftTopPriority
+            ? collectedRight // RIGHT wins
+            : collectedLeft; // LEFT wins
+      } else {
+        // Only one side has ads — take whichever is populated
+        activeSidebarAds =
+          collectedRight.length > 0 ? collectedRight : collectedLeft;
+      }
     }
 
     // ── Resolve half-page top
