@@ -1795,31 +1795,48 @@ async function buildDocument(input: PdfDocumentInput) {
 
   return React.createElement(Document, {}, ...pages);
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Count top-level Page elements in the document tree. */
+function countPages(doc: React.ReactElement): number {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const children = (doc as any)?.props?.children;
+  if (!children) return 0;
+  const arr = Array.isArray(children) ? children : [children];
+  return arr.filter((c: React.ReactElement) => c?.type === Page).length;
+}
+
 export async function generatePdf(
   input: PdfDocumentInput
 ): Promise<GenerationResult> {
-  const startTime = Date.now();
   try {
     const doc = await buildDocument(input);
-    const blob = await pdf(doc).toBlob();
-    const arrayBuffer = await blob.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const instance = pdf(doc);
+
+    let blob: Blob;
+    try {
+      blob = await instance.toBlob();
+    } catch (renderErr) {
+      console.error("[generator] @react-pdf render failed:", renderErr);
+      return { ok: false, error: `PDF render error: ${String(renderErr)}` };
+    }
+
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    const pagesCount = countPages(doc);
+
     return {
-      success: true,
+      ok: true,
       buffer,
-      byteSize: buffer.byteLength,
-      generationTimeMs: Date.now() - startTime,
+      pagesCount,
+      businessesCount: input.categorySections.reduce(
+        (sum, s) => sum + s.businesses.length,
+        0
+      ),
     };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      generationTimeMs: Date.now() - startTime,
-    };
+  } catch (err) {
+    console.error("[generator] PDF generation failed:", err);
+    return { ok: false, error: String(err) };
   }
 }
