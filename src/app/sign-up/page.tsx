@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignUpForm } from "./SignUpForm";
+import { isGoogleEnabled } from "@/lib/auth";
 
 export default function SignUpPage() {
   return (
@@ -15,9 +16,9 @@ export default function SignUpPage() {
         </div>
         <Card>
           <CardContent className="p-6">
-            <SignUpForm />
+            <SignUpForm googleEnabled={isGoogleEnabled} />
             <p className="mt-6 text-center text-sm text-muted-foreground">
-              لديك حساب؟{" "}
+              لديك حساب؟{" "}
               <Link href="/sign-in" className="font-bold text-accent hover:underline">
                 تسجيل الدخول
               </Link>
