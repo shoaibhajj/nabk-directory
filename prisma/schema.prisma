@@ -32,6 +32,7 @@ model User {
   passwordResetTokens                             PasswordResetToken[]
   ratings                                         Rating[]
   sessions                                        Session[]
+  reviewedVerifications                           VerificationRequest[]    @relation("VerificationReviewer")
 
   @@map("users")
 }
@@ -185,6 +186,9 @@ model BusinessProfile {
   latitude                  Float?
   longitude                 Float?
   status                    BusinessStatus       @default(DRAFT)
+  verificationStatus        VerificationStatus   @default(UNVERIFIED)
+  verifiedAt                DateTime?
+  verifiedById              String?
   coverImageId              String?
   logoImageId               String?
   viewCount                 Int                  @default(0)
@@ -208,10 +212,39 @@ model BusinessProfile {
   ratings                   Rating[]
   socialLinks               BusinessSocialLink[]
   workingHours              WorkingHours[]
+  verificationRequests      VerificationRequest[]
 
   @@index([categoryId, status])
   @@index([status, publishedAt])
+  @@index([verificationStatus])
   @@map("business_profiles")
+}
+
+/// طلب توثيق النشاط التجاري — يُرسله صاحب النشاط، وتراجعه الإدارة.
+/// الحقول اختيارية: يمكن إرسال الطلب بدون صورة أو رقم هاتف.
+model VerificationRequest {
+  id                String             @id @default(cuid())
+  businessProfileId String
+  requestedById     String
+  /// رابط صورة الهوية / جواز السفر المُرفقة (اختياري)
+  idImageUrl        String?
+  /// رقم التواصل المُقدَّم مع الطلب (اختياري)
+  contactPhone      String?
+  status            VerificationStatus @default(PENDING)
+  /// ملاحظة الإدارة عند القبول أو الرفض
+  adminNote         String?
+  reviewedById      String?
+  reviewedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  business    BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
+  requestedBy User            @relation(fields: [requestedById], references: [id])
+  reviewedBy  User?           @relation("VerificationReviewer", fields: [reviewedById], references: [id])
+
+  @@index([businessProfileId, status])
+  @@index([status, createdAt])
+  @@map("verification_requests")
 }
 
 model BusinessPhone {
@@ -577,6 +610,13 @@ enum BusinessStatus {
   REJECTED
 }
 
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 enum MediaType {
   IMAGE
   VIDEO
@@ -685,6 +725,9 @@ enum AuditAction {
   PDF_EDITION_AD_ADDED
   PDF_EDITION_AD_REMOVED
   PDF_EDITION_AD_UPDATED
+  BUSINESS_VERIFICATION_REQUESTED
+  BUSINESS_VERIFICATION_APPROVED
+  BUSINESS_VERIFICATION_REJECTED
 }
 
 enum PdfLegacyOpenMode {
