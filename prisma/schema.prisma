@@ -32,6 +32,7 @@ model User {
   passwordResetTokens                             PasswordResetToken[]
   ratings                                         Rating[]
   sessions                                        Session[]
+  requestedVerifications                          VerificationRequest[]    @relation("VerificationRequester")
   reviewedVerifications                           VerificationRequest[]    @relation("VerificationReviewer")
 
   @@map("users")
@@ -239,7 +240,7 @@ model VerificationRequest {
   updatedAt         DateTime           @updatedAt
 
   business    BusinessProfile @relation(fields: [businessProfileId], references: [id], onDelete: Cascade)
-  requestedBy User            @relation(fields: [requestedById], references: [id])
+  requestedBy User            @relation("VerificationRequester", fields: [requestedById], references: [id])
   reviewedBy  User?           @relation("VerificationReviewer", fields: [reviewedById], references: [id])
 
   @@index([businessProfileId, status])
