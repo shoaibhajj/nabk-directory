@@ -1,11 +1,12 @@
 import Link from "next/link";
-import type { BusinessStatus } from "@prisma/client";
+import type { BusinessStatus, VerificationStatus } from "@prisma/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BusinessActions } from "@/components/admin/BusinessActions";
 import {
   getAdminBusinesses,
   getAdminBusinessCounts,
+  getAdminVerificationCounts,
 } from "@/features/admin/queries";
 
 const STATUS_TABS: Array<{ value: BusinessStatus | "ALL"; label: string }> = [
@@ -15,39 +16,80 @@ const STATUS_TABS: Array<{ value: BusinessStatus | "ALL"; label: string }> = [
   { value: "ALL", label: "الكل" },
 ];
 
+const VERIF_TABS: Array<{ value: VerificationStatus | "ALL_VERIF"; label: string }> = [
+  { value: "PENDING", label: "توثيق بانتظار المراجعة" },
+  { value: "VERIFIED", label: "موثّق" },
+  { value: "REJECTED", label: "مرفوض التوثيق" },
+  { value: "UNVERIFIED", label: "غير موثّق" },
+  { value: "ALL_VERIF", label: "كل التوثيقات" },
+];
+
+const VERIF_BADGE: Record<
+  VerificationStatus,
+  "outline" | "accent" | "destructive" | "secondary"
+> = {
+  UNVERIFIED: "outline",
+  PENDING: "secondary",
+  VERIFIED: "accent",
+  REJECTED: "destructive",
+};
+
+const VERIF_LABEL: Record<VerificationStatus, string> = {
+  UNVERIFIED: "غير موثّق",
+  PENDING: "بانتظار التوثيق",
+  VERIFIED: "موثّق",
+  REJECTED: "مرفوض",
+};
+
 function parseStatus(value: unknown): BusinessStatus | "ALL" {
-  if (value === "ACTIVE" || value === "SUSPENDED" || value === "ALL") {
-    return value;
-  }
+  if (value === "ACTIVE" || value === "SUSPENDED" || value === "ALL") return value;
   return "DRAFT";
+}
+
+function parseVerifFilter(
+  value: unknown,
+): VerificationStatus | "ALL_VERIF" | null {
+  if (
+    value === "PENDING" ||
+    value === "VERIFIED" ||
+    value === "REJECTED" ||
+    value === "UNVERIFIED" ||
+    value === "ALL_VERIF"
+  )
+    return value;
+  return null;
 }
 
 export default async function AdminBusinessesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; verif?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const status = parseStatus(sp.status);
+  const verifFilter = parseVerifFilter(sp.verif);
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
 
-  const [{ items, total, pageSize }, counts] = await Promise.all([
-    getAdminBusinesses(status, page),
+  const [{ items, total, pageSize }, counts, verifCounts] = await Promise.all([
+    getAdminBusinesses(status, page, verifFilter),
     getAdminBusinessCounts(),
+    getAdminVerificationCounts(),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const isVerifMode = verifFilter !== null;
 
   return (
     <section className="container mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold">إدارة الأعمال</h1>
       <p className="mt-1 text-muted-foreground">
-        راجع طلبات النشر، أوقف أو استعد الأعمال المخالفة.
+        راجع طلبات النشر، أوقف أو استعد الأعمال المخالفة، وأدِر حالات التوثيق.
       </p>
 
+      {/* ── Business status tabs ── */}
       <div className="mt-6 flex flex-wrap gap-2">
         {STATUS_TABS.map((t) => {
-          const active = t.value === status;
+          const active = t.value === status && !isVerifMode;
           return (
             <Link
               key={t.value}
@@ -64,6 +106,34 @@ export default async function AdminBusinessesPage({
         })}
       </div>
 
+      {/* ── Verification filter tabs ── */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span className="self-center text-xs font-medium text-muted-foreground ml-1">
+          التوثيق:
+        </span>
+        {VERIF_TABS.map((t) => {
+          const active = t.value === verifFilter;
+          const count =
+            t.value === "ALL_VERIF"
+              ? verifCounts.ALL_VERIF
+              : verifCounts[t.value as VerificationStatus];
+          return (
+            <Link
+              key={t.value}
+              href={`/admin/businesses?verif=${t.value}`}
+              className={
+                active
+                  ? "rounded-full border-2 border-primary bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+                  : "rounded-full border border-border px-3 py-1 text-xs font-semibold hover:border-accent hover:text-accent"
+              }
+            >
+              {t.label} ({count})
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* ── Business list ── */}
       <div className="mt-6 space-y-3">
         {items.length === 0 ? (
           <Card>
@@ -88,21 +158,26 @@ export default async function AdminBusinessesPage({
                       <span className="font-mono">{b.owner.email}</span>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      b.status === "ACTIVE"
-                        ? "accent"
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant={
+                        b.status === "ACTIVE"
+                          ? "accent"
+                          : b.status === "SUSPENDED"
+                            ? "destructive"
+                            : "outline"
+                      }
+                    >
+                      {b.status === "ACTIVE"
+                        ? "منشور"
                         : b.status === "SUSPENDED"
-                          ? "destructive"
-                          : "outline"
-                    }
-                  >
-                    {b.status === "ACTIVE"
-                      ? "منشور"
-                      : b.status === "SUSPENDED"
-                        ? "موقوف"
-                        : "مسودة / بانتظار الاعتماد"}
-                  </Badge>
+                          ? "موقوف"
+                          : "مسودة / بانتظار الاعتماد"}
+                    </Badge>
+                    <Badge variant={VERIF_BADGE[b.verificationStatus]}>
+                      {VERIF_LABEL[b.verificationStatus]}
+                    </Badge>
+                  </div>
                 </div>
 
                 {b.descriptionAr ? (
@@ -113,14 +188,16 @@ export default async function AdminBusinessesPage({
 
                 {b.status === "SUSPENDED" && b.suspensionReason ? (
                   <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                    <span className="font-semibold text-destructive">
-                      سبب الإيقاف:
-                    </span>{" "}
+                    <span className="font-semibold text-destructive">سبب الإيقاف:</span>{" "}
                     <span className="text-foreground">{b.suspensionReason}</span>
                   </div>
                 ) : null}
 
-                <BusinessActions businessId={b.id} status={b.status} />
+                <BusinessActions
+                  businessId={b.id}
+                  status={b.status}
+                  verificationStatus={b.verificationStatus}
+                />
               </CardContent>
             </Card>
           ))
@@ -131,7 +208,11 @@ export default async function AdminBusinessesPage({
         <Pagination
           page={page}
           totalPages={totalPages}
-          baseHref={`/admin/businesses?status=${status}`}
+          baseHref={
+            isVerifMode
+              ? `/admin/businesses?verif=${verifFilter}`
+              : `/admin/businesses?status=${status}`
+          }
         />
       ) : null}
     </section>

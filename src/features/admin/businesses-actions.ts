@@ -12,8 +12,12 @@ import {
   listingRejectedHtml,
   listingSuspendedHtml,
 } from "@/lib/email";
+import type { VerificationStatus } from "@prisma/client";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+export type UploadResult =
+  | { ok: true; url: string; publicId: string }
+  | { ok: false; error: string };
 
 async function requireAdmin(): Promise<AuditActor | null> {
   const session = await auth();
@@ -54,6 +58,195 @@ const reasonSchema = z.object({
   reason: z.string().trim().min(3).max(500),
 });
 
+// ─── Verification moderation ────────────────────────────────────────────────
+
+const verificationModerationSchema = z.object({
+  businessId: z.string().min(1),
+  newStatus: z.enum(["VERIFIED", "REJECTED", "UNVERIFIED"]),
+  adminNote: z.string().trim().max(500).optional(),
+});
+
+export async function adminUpdateVerificationAction(
+  input: z.infer<typeof verificationModerationSchema>,
+): Promise<ActionResult> {
+  const actor = await requireAdmin();
+  if (!actor || !actor.id) return { ok: false, error: "غير مسموح." };
+
+  const rl = await withRateLimit(
+    `admin-verification:${actor.id}`,
+    60,
+    60 * 60 * 1000,
+  );
+  if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
+
+  const parsed = verificationModerationSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "بيانات غير صالحة." };
+
+  const { businessId, newStatus, adminNote } = parsed.data;
+
+  const business = await prisma.businessProfile.findUnique({
+    where: { id: businessId },
+    include: { owner: { select: { id: true, name: true, email: true } } },
+  });
+  if (!business || business.deletedAt) {
+    return { ok: false, error: "العمل غير موجود." };
+  }
+
+  const previousStatus = business.verificationStatus;
+
+  await prisma.$transaction(async (tx) => {
+    // Update business verification status
+    await tx.businessProfile.update({
+      where: { id: businessId },
+      data: {
+        verificationStatus: newStatus as VerificationStatus,
+        verifiedAt: newStatus === "VERIFIED" ? new Date() : null,
+        verifiedById: newStatus === "VERIFIED" ? actor.id : null,
+      },
+    });
+
+    // Update latest pending verification request if exists
+    const latestRequest = await tx.verificationRequest.findFirst({
+      where: { businessProfileId: businessId, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (latestRequest) {
+      await tx.verificationRequest.update({
+        where: { id: latestRequest.id },
+        data: {
+          status: newStatus as VerificationStatus,
+          reviewedById: actor.id,
+          reviewedAt: new Date(),
+          adminNote: adminNote ?? null,
+        },
+      });
+    }
+  });
+
+  const auditAction =
+    newStatus === "VERIFIED"
+      ? ("BUSINESS_VERIFICATION_APPROVED" as const)
+      : ("BUSINESS_VERIFICATION_REJECTED" as const);
+
+  await recordAudit({
+    actor,
+    action: auditAction,
+    entityType: "BusinessProfile",
+    entityId: businessId,
+    before: { verificationStatus: previousStatus },
+    after: { verificationStatus: newStatus, adminNote },
+  });
+
+  const notifTitle =
+    newStatus === "VERIFIED"
+      ? "تم توثيق عملك"
+      : newStatus === "REJECTED"
+        ? "تم رفض طلب التوثيق"
+        : "تم إلغاء توثيق عملك";
+
+  const notifMessage =
+    newStatus === "VERIFIED"
+      ? `تهانينا! تم توثيق «${business.nameAr}» رسمياً في الدليل.`
+      : `«${business.nameAr}» — ${adminNote ?? "تم تغيير حالة التوثيق من قِبَل الإدارة."}` ;
+
+  await notifyOwner({
+    userId: business.owner.id,
+    type: `VERIFICATION_${newStatus}`,
+    titleAr: notifTitle,
+    messageAr: notifMessage,
+    relatedEntityType: "BusinessProfile",
+    relatedEntityId: businessId,
+  });
+
+  revalidatePath("/admin/businesses");
+  revalidatePath("/businesses/[slug]", "page");
+  return { ok: true };
+}
+
+// ─── Cloudinary secure image upload (server-side validation) ────────────────
+// Only images are accepted. Max 5 MB. Uploaded to a dedicated folder.
+// The raw credentials never leave the server — the client only sends a FormData.
+
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+export async function adminUploadVerificationImageAction(
+  formData: FormData,
+): Promise<UploadResult> {
+  const actor = await requireAdmin();
+  if (!actor) return { ok: false, error: "غير مسموح." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { ok: false, error: "لم يتم إرفاق ملف." };
+
+  // ── Security checks ──────────────────────────────────────────────────
+  if (!ALLOWED_MIME.has(file.type)) {
+    return { ok: false, error: "نوع الملف غير مسموح. يُقبل فقط: JPEG, PNG, WebP, GIF." };
+  }
+  if (file.size > MAX_BYTES) {
+    return { ok: false, error: "حجم الصورة يتجاوز 5 ميغابايت." };
+  }
+
+  // ── Read first 8 bytes to validate magic numbers ─────────────────────
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer.slice(0, 8));
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+  const isWebp =
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[6] === 0x57 && bytes[7] === 0x45;
+  const isGif = bytes[0] === 0x47 && bytes[1] === 0x49;
+  if (!isJpeg && !isPng && !isWebp && !isGif) {
+    return { ok: false, error: "الملف لا يبدو صورة حقيقية. قد يكون محتوى خبيثاً." };
+  }
+
+  // ── Upload to Cloudinary via REST API ────────────────────────────────
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    return { ok: false, error: "إعدادات Cloudinary غير مكتملة." };
+  }
+
+  const timestamp = Math.round(Date.now() / 1000).toString();
+  const folder = "nabk-verification";
+
+  // Build signature: SHA-1("folder=nabk-verification&timestamp=..." + secret)
+  const signaturePayload = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+  const msgBuffer = new TextEncoder().encode(signaturePayload);
+  const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
+  const signature = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const uploadForm = new FormData();
+  uploadForm.append("file", new Blob([buffer], { type: file.type }), file.name);
+  uploadForm.append("api_key", apiKey);
+  uploadForm.append("timestamp", timestamp);
+  uploadForm.append("folder", folder);
+  uploadForm.append("signature", signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+    { method: "POST", body: uploadForm },
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error("[Cloudinary upload error]", err);
+    return { ok: false, error: "فشل رفع الصورة إلى Cloudinary." };
+  }
+
+  const data = (await response.json()) as { secure_url: string; public_id: string };
+  return { ok: true, url: data.secure_url, publicId: data.public_id };
+}
+
+// ─── Existing business status actions (unchanged) ──────────────────────────
+
 export async function adminApproveBusinessAction(
   input: z.infer<typeof businessIdSchema>,
 ): Promise<ActionResult> {
@@ -70,11 +263,6 @@ export async function adminApproveBusinessAction(
   const parsed = businessIdSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات غير صالحة." };
 
-  // Atomic transition: DRAFT -> ACTIVE only. The conditional `where` clause
-  // guarantees that two concurrent admin actions cannot both succeed —
-  // exactly one updateMany will report count===1 and the other will be 0.
-  // Approving an already-published or suspended listing is rejected so the
-  // state machine stays explicit (suspended needs adminRestoreBusinessAction).
   const business = await prisma.businessProfile.findUnique({
     where: { id: parsed.data.businessId },
     include: { owner: { select: { id: true, name: true, email: true } } },
@@ -153,11 +341,6 @@ export async function adminRejectBusinessAction(
   const parsed = reasonSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "السبب مطلوب (3-500 حرفاً)." };
 
-  // Reject (DRAFT->SUSPENDED) and suspend (ACTIVE->SUSPENDED) share this
-  // action; we map to LISTING_REJECTED vs LISTING_SUSPENDED by current state.
-  // Both transitions are guarded by a conditional updateMany so two admins
-  // hitting the button at once cannot both win, and an already-suspended
-  // listing cannot be "double-suspended" with a new reason.
   const business = await prisma.businessProfile.findUnique({
     where: { id: parsed.data.businessId },
     include: { owner: { select: { id: true, name: true, email: true } } },
@@ -253,7 +436,6 @@ export async function adminRestoreBusinessAction(
   const parsed = businessIdSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "بيانات غير صالحة." };
 
-  // Restore: SUSPENDED -> ACTIVE, atomic on current status.
   const business = await prisma.businessProfile.findUnique({
     where: { id: parsed.data.businessId },
     include: { owner: { select: { id: true } } },

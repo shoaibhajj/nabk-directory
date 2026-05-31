@@ -3,6 +3,7 @@ import type {
   CommentStatus,
   Prisma,
   Role,
+  VerificationStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
@@ -65,10 +66,20 @@ export async function getAdminCategories() {
 export async function getAdminBusinesses(
   status: BusinessStatus | "ALL",
   page = 1,
+  verifFilter: VerificationStatus | "ALL_VERIF" | null = null,
 ) {
   const skip = (Math.max(1, page) - 1) * ADMIN_PAGE_SIZE;
   const where: Prisma.BusinessProfileWhereInput = { deletedAt: null };
-  if (status !== "ALL") where.status = status;
+
+  // Apply business status filter (ignored when verifFilter is set)
+  if (!verifFilter) {
+    if (status !== "ALL") where.status = status;
+  }
+
+  // Apply verification filter
+  if (verifFilter && verifFilter !== "ALL_VERIF") {
+    where.verificationStatus = verifFilter;
+  }
 
   const [items, total] = await Promise.all([
     prisma.businessProfile.findMany({
@@ -103,6 +114,26 @@ export async function getAdminBusinessCounts() {
   for (const r of rows) {
     counts[r.status] = r._count._all;
     counts.ALL += r._count._all;
+  }
+  return counts;
+}
+
+export async function getAdminVerificationCounts() {
+  const rows = await prisma.businessProfile.groupBy({
+    by: ["verificationStatus"],
+    where: { deletedAt: null },
+    _count: { _all: true },
+  });
+  const counts: Record<VerificationStatus | "ALL_VERIF", number> = {
+    UNVERIFIED: 0,
+    PENDING: 0,
+    VERIFIED: 0,
+    REJECTED: 0,
+    ALL_VERIF: 0,
+  };
+  for (const r of rows) {
+    counts[r.verificationStatus] = r._count._all;
+    counts.ALL_VERIF += r._count._all;
   }
   return counts;
 }
