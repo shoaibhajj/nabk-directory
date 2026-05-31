@@ -117,6 +117,15 @@ export async function signInAction(
   }
 }
 
+/**
+ * Initiates Google OAuth flow via Auth.js v5 server action.
+ * Must be called from a form action — Auth.js requires POST for OAuth,
+ * so a plain <a href> GET request causes UnknownAction error.
+ */
+export async function signInWithGoogleAction() {
+  await signIn("google", { redirectTo: "/dashboard" });
+}
+
 export async function signOutAndRedirect() {
   redirect("/api/auth/signout");
 }
