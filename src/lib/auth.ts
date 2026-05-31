@@ -1,7 +1,6 @@
 import NextAuth, { type DefaultSession, type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -118,13 +117,92 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  // NOTE: No PrismaAdapter here — it conflicts with jwt strategy and breaks
+  // Google OAuth (UnknownAction error). Google users are upserted manually
+  // in the signIn callback below. Credentials provider requires jwt strategy.
   session: { strategy: "jwt" },
   providers,
   pages: {
     signIn: "/sign-in",
   },
   callbacks: {
+    async signIn({ user, account }) {
+      // Handle Google OAuth: upsert user + link Account in our DB manually
+      if (account?.provider === "google") {
+        if (!user.email) return false;
+
+        try {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            select: { id: true, deletedAt: true },
+          });
+
+          let dbUserId: string;
+
+          if (existingUser) {
+            if (existingUser.deletedAt) return false;
+            dbUserId = existingUser.id;
+            // Update profile image from Google if not set
+            await prisma.user.update({
+              where: { id: dbUserId },
+              data: {
+                image: user.image ?? undefined,
+                emailVerified: new Date(),
+              },
+            });
+          } else {
+            // New user via Google — create account
+            const newUser = await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name ?? user.email.split("@")[0],
+                image: user.image ?? null,
+                emailVerified: new Date(),
+                role: "BUSINESS_OWNER",
+              },
+            });
+            dbUserId = newUser.id;
+          }
+
+          // Upsert the OAuth Account link
+          await prisma.account.upsert({
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+              },
+            },
+            create: {
+              userId: dbUserId,
+              type: account.type,
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token ?? null,
+              refresh_token: account.refresh_token ?? null,
+              expires_at: account.expires_at ?? null,
+              token_type: account.token_type ?? null,
+              scope: account.scope ?? null,
+              id_token: account.id_token ?? null,
+            },
+            update: {
+              access_token: account.access_token ?? null,
+              refresh_token: account.refresh_token ?? null,
+              expires_at: account.expires_at ?? null,
+              id_token: account.id_token ?? null,
+            },
+          });
+
+          // Attach our DB user id so jwt callback can pick it up
+          user.id = dbUserId;
+        } catch (err) {
+          console.error("[auth] Google signIn DB error:", err);
+          return false;
+        }
+      }
+
+      return true;
+    },
+
     async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
@@ -164,6 +242,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = (token.id as string) ?? (token.sub as string);
