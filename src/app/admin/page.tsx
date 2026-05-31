@@ -11,7 +11,6 @@ import {
 
 export default async function AdminPage() {
   const session = await auth();
-  // Layout already protects this route, this guards types.
   if (!session?.user) return null;
 
   const [
@@ -20,12 +19,16 @@ export default async function AdminPage() {
     ratingCount,
     userCount,
     pendingSuggestions,
+    pendingVerifications,
   ] = await Promise.all([
     getAdminBusinessCounts(),
     getAdminCommentCounts(),
     prisma.rating.count(),
     prisma.user.count({ where: { deletedAt: null } }),
     prisma.categorySuggestion.count({ where: { status: "PENDING" } }),
+    prisma.verificationRequest
+      .count({ where: { status: "PENDING" } })
+      .catch(() => 0),
   ]);
 
   const pendingCount = businessCounts.PENDING ?? 0;
@@ -79,6 +82,7 @@ export default async function AdminPage() {
         <StatCard label="اقتراحات الفئات" value={pendingSuggestions} />
       </div>
 
+      {/* طابور المراجعة */}
       <Card className="mt-8">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-6">
           <div className="flex items-center gap-3">
@@ -92,6 +96,25 @@ export default async function AdminPage() {
           <Link href="/admin/moderation">
             <Button variant="primary" size="md">
               فتح طابور المراجعة
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+
+      {/* طابور التوثيق */}
+      <Card className="mt-4">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-6">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold">طابور التوثيق</h2>
+            {pendingVerifications > 0 ? (
+              <Badge variant="warning">{pendingVerifications} ينتظر</Badge>
+            ) : (
+              <Badge variant="outline">لا يوجد</Badge>
+            )}
+          </div>
+          <Link href="/admin/verifications">
+            <Button variant="primary" size="md">
+              فتح طابور التوثيق
             </Button>
           </Link>
         </CardContent>

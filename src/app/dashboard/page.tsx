@@ -11,7 +11,6 @@ import { DeleteListingButton } from "@/components/business/DeleteListingButton";
 
 export default async function DashboardPage() {
   const session = await auth();
-  // Auth + email-verification is enforced by `dashboard/layout.tsx`.
   if (!session?.user) redirect("/sign-in?callbackUrl=/dashboard");
 
   const listings = await prisma.businessProfile.findMany({
@@ -60,7 +59,10 @@ export default async function DashboardPage() {
                           {b.category.nameAr} · {b.viewCount} مشاهدة
                         </div>
                       </div>
-                      <StatusBadge status={b.status} />
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusBadge status={b.status} />
+                        <VerificationBadge status={b.verificationStatus} />
+                      </div>
                     </div>
                     {b.status === "REJECTED" && b.suspensionReason && (
                       <p className="rounded-xl bg-red-50 p-2 text-xs text-red-700">
@@ -76,6 +78,9 @@ export default async function DashboardPage() {
                           <Button variant="ghost" size="sm">عرض</Button>
                         </Link>
                       )}
+                      <Link href={`/dashboard/listings/${b.id}/verification`}>
+                        <Button variant="ghost" size="sm">توثيق</Button>
+                      </Link>
                       <DeleteListingButton
                         listingId={b.id}
                         listingName={b.nameAr}
@@ -99,4 +104,14 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "SUSPENDED") return <Badge variant="destructive">معلّق</Badge>;
   if (status === "REJECTED") return <Badge variant="destructive">مرفوض</Badge>;
   return <Badge variant="outline">مسودة</Badge>;
+}
+
+function VerificationBadge({ status }: { status: string }) {
+  if (status === "VERIFIED")
+    return <Badge variant="accent" className="text-xs">موثّق ✓</Badge>;
+  if (status === "PENDING")
+    return <Badge variant="warning" className="text-xs">توثيق قيد المراجعة</Badge>;
+  if (status === "REJECTED")
+    return <Badge variant="destructive" className="text-xs">توثيق مرفوض</Badge>;
+  return null; // UNVERIFIED — لا نعرض شيئاً
 }
