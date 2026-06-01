@@ -1,33 +1,43 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #FCFAF8;
-  --color-foreground: #2E261F;
-  --color-muted: #F8F6F3;
-  --color-muted-foreground: #7E7367;
-  --color-border: #E8E2DA;
-  --color-input: #F8F6F3;
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  --color-background:        #FCFAF8;
+  --color-foreground:        #2E261F;
+  --color-muted:             #F5F2EE;
+  --color-muted-foreground:  #7E7367;
+  --color-border:            #E8E2DA;
+  --color-input:             #F5F2EE;
 
-  --color-primary: #F2930D;
+  /* ── Primary = GREEN (زر "أضف عملك"، header active، ring) ─────────── */
+  --color-primary:           #147a52;
   --color-primary-foreground: #FFFFFF;
-  --color-primary-border: #CB7B0B;
+  --color-primary-border:    #0e5c3d;
+  --color-primary-hover:     #0e5c3d;
+  --color-primary-light:     #E8F5EE;
 
-  --color-accent: #1A664D;
+  /* ── Accent = ORANGE (زر "الدليل"، CTAs الثانوية) ─────────────────── */
+  --color-accent:            #E8920A;
   --color-accent-foreground: #FFFFFF;
-  --color-accent-border: #114534;
+  --color-accent-border:     #C47A08;
+  --color-accent-hover:      #C47A08;
+  --color-accent-light:      #FEF3E2;
 
-  --color-secondary: #E7F6E9;
-  --color-secondary-foreground: #1A664D;
+  /* ── Secondary (خلفية badge الأخضر الفاتح) ──────────────────────── */
+  --color-secondary:         #E8F5EE;
+  --color-secondary-foreground: #147a52;
 
-  --color-card: #FFFFFF;
-  --color-card-foreground: #2E261F;
+  /* ── Cards ───────────────────────────────────────────────────────── */
+  --color-card:              #FFFFFF;
+  --color-card-foreground:   #2E261F;
 
-  --color-destructive: #DC2626;
+  /* ── Status ──────────────────────────────────────────────────────── */
+  --color-destructive:       #DC2626;
   --color-destructive-foreground: #FFFFFF;
+  --color-star:              #F59E0B;
 
-  --color-star: #F59E0B;
-
-  --font-sans: var(--font-cairo), "Cairo", "Noto Naskh Arabic", system-ui, sans-serif;
+  /* ── Typography ──────────────────────────────────────────────────── */
+  --font-sans:    var(--font-cairo), "Cairo", "Noto Naskh Arabic", system-ui, sans-serif;
   --font-heading: var(--font-naskh), "Noto Naskh Arabic", "Cairo", serif;
 
   --radius-pill: 9999px;
@@ -57,8 +67,9 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
 }
 
+/* Hero gradient — أخضر فاتح جداً بدل البرتقالي */
 .gradient-hero {
-  background: radial-gradient(ellipse at top, #FFE9C9 0%, #FCFAF8 60%);
+  background: radial-gradient(ellipse at top, #DDF0E8 0%, #FCFAF8 60%);
 }
 
 .shadow-soft {
@@ -69,6 +80,12 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -2px rgba(0,0,0,0.04);
 }
 
+/* CTA shadow — أخضر بدل البرتقالي */
 .shadow-cta {
-  box-shadow: 0 10px 15px -3px rgba(242,147,13,0.2), 0 4px 6px -4px rgba(242,147,13,0.18);
+  box-shadow: 0 10px 15px -3px rgba(20,122,82,0.20), 0 4px 6px -4px rgba(20,122,82,0.15);
+}
+
+/* CTA accent shadow — للأزرار البرتقالية */
+.shadow-cta-accent {
+  box-shadow: 0 10px 15px -3px rgba(232,146,10,0.22), 0 4px 6px -4px rgba(232,146,10,0.18);
 }
