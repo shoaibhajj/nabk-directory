@@ -58,7 +58,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .gradient-hero {
-  background: radial-gradient(ellipse at top, #FFE9C9 0%, #FCFAF8 60%);
+  background: radial-gradient(ellipse at top, #D6EFE4 0%, #FCFAF8 60%);
 }
 
 .shadow-soft {
