@@ -42,26 +42,28 @@ export default async function HomePage() {
       <Header />
 
       {/* ───────── Hero ───────── */}
-      <section className="relative gradient-hero overflow-hidden">
-        {/* subtle texture overlay */}
+      <section className="gradient-hero relative overflow-hidden">
         <div
-          className="absolute inset-0 opacity-[0.03] mix-blend-multiply pointer-events-none"
+          className="pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-multiply"
           style={{
             backgroundImage:
               "url('https://www.transparenttextures.com/patterns/cubes.png')",
           }}
         />
 
-        <div className="container mx-auto px-4 py-20 text-center md:py-32 relative z-10">
-          {/* badge */}
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-4 py-1.5 text-sm font-semibold text-accent shadow-soft">
+        <div className="container relative z-10 mx-auto px-4 py-20 text-center md:py-32">
+
+          {/* badge — orange (primary) */}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground shadow-soft">
             <MapPin className="h-4 w-4" />
             مدينتك بين يديك
           </span>
 
+          {/* heading */}
           <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-tight text-foreground md:text-6xl">
             ابحث عن أي شيء في
-            <span className="mt-2 block text-primary">مدينة النبك</span>
+            {/* city name — green (accent) */}
+            <span className="mt-2 block text-accent">مدينة النبك</span>
           </h1>
 
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
@@ -82,10 +84,11 @@ export default async function HomePage() {
                 className="h-14 rounded-xl border-none bg-muted/30 pl-4 pr-12 text-lg shadow-none focus-visible:ring-0"
               />
             </div>
+            {/* search button — green (accent) */}
             <Button
               type="submit"
-              variant="primary"
-              className="h-14 rounded-xl px-8 text-lg font-bold shadow-cta"
+              variant="accent"
+              className="h-14 rounded-xl px-8 text-lg font-bold"
             >
               بحث
             </Button>
@@ -98,14 +101,13 @@ export default async function HomePage() {
               <Link
                 key={p}
                 href={`/businesses?search=${encodeURIComponent(p)}`}
-                className="rounded-full bg-primary/5 px-3 py-1 text-primary hover:underline"
+                className="rounded-full bg-secondary px-3 py-1 text-secondary-foreground hover:bg-[#D9F0DC] transition-colors"
               >
                 {p}
               </Link>
             ))}
           </div>
 
-          {/* PDF Hero Buttons */}
           <PdfHeroButtons />
         </div>
       </section>
@@ -114,7 +116,7 @@ export default async function HomePage() {
       <section className="border-b border-border bg-card py-12">
         <div className="container mx-auto px-4">
           <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 text-center md:grid-cols-4">
-            <StatCard icon={Building2} value={stats.businessCount} label="عمل وخدمة" color="text-accent" />
+            <StatCard icon={Building2} value={stats.businessCount} label="عمل وخدمة" color="text-secondary-foreground" />
             <StatCard icon={LayoutGrid} value={stats.categoryCount} label="تصنيف" color="text-primary" />
             <StatCard icon={MapPin} value={stats.cityCount} label="مدينة وموقع" color="text-destructive" />
             <StatCard icon={Users} value={"0+"} label="زيارة شهرية" color="text-blue-500" />
@@ -137,12 +139,12 @@ export default async function HomePage() {
               const Icon = getCategoryIcon(c.slug);
               return (
                 <Link key={c.id} href={`/category/${c.slug}`}>
-                  <div className="group flex h-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-6 text-center transition-all duration-300 hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors duration-300 group-hover:bg-primary group-hover:text-primary-foreground">
+                  <div className="group flex h-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-6 text-center transition-all duration-300 hover:border-accent/50 hover:-translate-y-0.5 hover:shadow-lg">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-secondary text-secondary-foreground transition-colors duration-300 group-hover:bg-accent group-hover:text-accent-foreground">
                       <Icon className="h-7 w-7" />
                     </div>
                     <div>
-                      <div className="font-bold leading-tight text-foreground transition-colors group-hover:text-primary">
+                      <div className="font-bold leading-tight text-foreground transition-colors group-hover:text-accent">
                         {c.nameAr}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -199,7 +201,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ───────── CTA ───────── */}
+      {/* ───────── CTA — green (accent) background ───────── */}
       <section className="relative overflow-hidden bg-accent py-20 text-accent-foreground">
         <div
           className="absolute inset-0 opacity-10 mix-blend-multiply"
@@ -216,11 +218,12 @@ export default async function HomePage() {
             انضم إلى أكبر دليل محلي في المدينة. أضف عملك مجاناً واجعل وصول
             الزبائن إليك أسهل.
           </p>
+          {/* CTA button — orange (primary) on green background */}
           <Link href="/dashboard/listings/new" className="mt-8 inline-block">
             <Button
               variant="primary"
               size="lg"
-              className="rounded-full px-8 text-lg font-bold shadow-lg transition-transform hover:scale-105"
+              className="mt-8 rounded-full px-8 text-lg font-bold shadow-lg transition-transform hover:scale-105"
             >
               أضف عملك الآن
             </Button>
