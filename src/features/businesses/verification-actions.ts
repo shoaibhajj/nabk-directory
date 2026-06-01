@@ -4,11 +4,98 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { VerificationStatus } from "@prisma/client";
+import { v2 as cloudinary } from "cloudinary";
+
+// ─── إعداد Cloudinary ───────────────────────────────────────────────────────
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
 
 // ─── نوع النتيجة الموحّد ────────────────────────────────────────────────────
 type ActionResult<T = void> =
   | { success: true; data?: T }
   | { success: false; error: string };
+
+// ─── magic bytes للتحقق من نوع الملف الحقيقي ────────────────────────────────
+const IMAGE_SIGNATURES: { mime: string; bytes: number[] }[] = [
+  { mime: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
+  { mime: "image/png",  bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { mime: "image/webp", bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF....WEBP
+];
+
+function detectMimeFromBytes(buffer: Buffer): string | null {
+  for (const sig of IMAGE_SIGNATURES) {
+    if (sig.bytes.every((b, i) => buffer[i] === b)) return sig.mime;
+  }
+  return null;
+}
+
+// ─── 0. رفع صورة التوثيق (صاحب النشاط) ─────────────────────────────────────
+export async function uploadVerificationImageAction(
+  businessProfileId: string,
+  formData: FormData
+): Promise<ActionResult<{ url: string }>> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "غير مصرح" };
+
+  // تحقق أن النشاط ملك للمستخدم الحالي
+  const profile = await prisma.businessProfile.findUnique({
+    where: { id: businessProfileId },
+    select: { ownerId: true },
+  });
+  if (!profile) return { success: false, error: "النشاط غير موجود" };
+  if (profile.ownerId !== session.user.id)
+    return { success: false, error: "غير مصرح" };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { success: false, error: "لم يتم تحديد ملف" };
+
+  // حجم أقصى 5MB
+  if (file.size > 5 * 1024 * 1024)
+    return { success: false, error: "حجم الملف يتجاوز 5MB" };
+
+  // MIME type مسموح
+  const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedMimes.includes(file.type))
+    return { success: false, error: "نوع الملف غير مسموح — يُقبل jpg/png/webp فقط" };
+
+  // التحقق من magic bytes
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const detectedMime = detectMimeFromBytes(buffer);
+  if (!detectedMime)
+    return { success: false, error: "الملف لا يبدو صورة حقيقية" };
+  // webp: تحقق إضافي من bytes 8-11 = 'WEBP'
+  if (detectedMime === "image/webp") {
+    const riffMark = buffer.slice(8, 12).toString("ascii");
+    if (riffMark !== "WEBP")
+      return { success: false, error: "الملف لا يبدو صورة حقيقية" };
+  }
+
+  // رفع لـ Cloudinary داخل مجلد nabk/verification/
+  const uploadResult = await new Promise<{ secure_url: string }>(
+    (resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "nabk/verification",
+          resource_type: "image",
+          allowed_formats: ["jpg", "jpeg", "png", "webp"],
+          transformation: [{ quality: "auto", fetch_format: "auto" }],
+        },
+        (error, result) => {
+          if (error || !result) reject(error ?? new Error("Upload failed"));
+          else resolve(result as { secure_url: string });
+        }
+      );
+      stream.end(buffer);
+    }
+  );
+
+  return { success: true, data: { url: uploadResult.secure_url } };
+}
 
 // ─── 1. طلب التوثيق (صاحب النشاط) ──────────────────────────────────────────
 export async function requestVerification(
