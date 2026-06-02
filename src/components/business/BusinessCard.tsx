@@ -1,94 +1,92 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { MapPin, Phone, Star, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Phone, MapPin, Clock, Star } from "lucide-react";
-import { isOpenNow } from "@/lib/working-hours";
-import { getCategoryIcon } from "@/components/business/category-icons";
 import type { BusinessCardData } from "@/features/businesses/queries";
+import { VerifiedBadge } from "./VerifiedBadge";
 
-export function BusinessCard({ business }: { business: BusinessCardData }) {
-  const status = isOpenNow(business.workingHours);
-  const phone = business.phones[0]?.number;
-  const CategoryIcon = getCategoryIcon(business.category.slug);
+interface Props {
+  business: BusinessCardData;
+}
+
+function formatWorkingStatus(workingHours: BusinessCardData["workingHours"]) {
+  const now = new Date();
+  // 0 = Sunday in JS, but dayOfWeek 0 = Monday in our schema — shift accordingly
+  const dayIndex = now.getDay(); // 0-6 (Sun-Sat)
+  const schemaDayIndex = dayIndex === 0 ? 6 : dayIndex - 1; // 0 = Mon
+  const today = workingHours.find((h) => h.dayOfWeek === schemaDayIndex);
+  if (!today) return null;
+  if (!today.isOpen) return { open: false, label: "\u0645\u063a\u0644\u0642 \u0627\u0644\u064a\u0648\u0645" };
+  if (today.is24Hours) return { open: true, label: "\u0645\u0641\u062a\u0648\u062d 24 \u0633\u0627\u0639\u0629" };
+  if (today.openTime && today.closeTime)
+    return { open: true, label: `${today.openTime} \u2013 ${today.closeTime}` };
+  return { open: true, label: "\u0645\u0641\u062a\u0648\u062d" };
+}
+
+export function BusinessCard({ business }: Props) {
+  const status = formatWorkingStatus(business.workingHours);
+  const firstPhone = business.phones[0]?.number;
+  const isVerified = business.verificationStatus === "VERIFIED";
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
-      <CardContent className="flex flex-1 flex-col gap-3 p-5">
-        
-        <div className="flex items-start justify-between gap-3">
-             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-accent">
-              <CategoryIcon className="h-5 w-5" />
-            </div>
-          <div className="flex-1 min-w-0">
-            <Link
-              href={`/businesses/${business.slug}`}
-              className="text-lg font-bold text-foreground hover:text-accent line-clamp-1"
-            >
+    <Link href={`/businesses/${business.slug}`} className="group block">
+      <Card className="h-full overflow-hidden transition-shadow hover:shadow-md">
+        {/* Cover */}
+        <div className="relative h-36 bg-muted">
+          {/* Category chip */}
+          <span className="absolute right-3 top-3 rounded-full bg-background/80 px-2.5 py-1 text-xs font-medium backdrop-blur-sm">
+            {business.category.nameAr}
+          </span>
+
+          {/* Verified badge — top-left */}
+          {isVerified && (
+            <span className="absolute left-3 top-3">
+              <VerifiedBadge size="sm" />
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-4 space-y-3">
+          {/* Name row */}
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-bold leading-snug group-hover:text-accent line-clamp-2">
               {business.nameAr}
-            </Link>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <Link href={`/category/${business.category.slug}`} className="inline-flex">
-                <Badge variant="default">{business.category.nameAr}</Badge>
-              </Link>
-              {business.subcategory && (
-                <Badge variant="outline" className="text-xs">
-                  {business.subcategory.nameAr}
-                </Badge>
-              )}
-            </div>
+            </h3>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
+
+          {/* Meta rows */}
+          <div className="space-y-1.5 text-sm text-muted-foreground">
+            {firstPhone && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 shrink-0" />
+                <span dir="ltr">{firstPhone}</span>
+              </div>
+            )}
+
+            {status && (
+              <div className="flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span
+                  className={status.open ? "text-emerald-600" : "text-rose-500"}
+                >
+                  {status.label}
+                </span>
+              </div>
+            )}
+
             {business.ratingCount > 0 && (
-              <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
-                <Star className="h-3.5 w-3.5 fill-[var(--color-star)] text-[var(--color-star)]" />
-                <span className="text-xs font-bold">{business.ratingAverage.toFixed(1)}</span>
+              <div className="flex items-center gap-2">
+                <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />
+                <span>
+                  {business.ratingAverage.toFixed(1)}{" "}
+                  <span className="text-xs">
+                    ({business.ratingCount})
+                  </span>
+                </span>
               </div>
             )}
           </div>
-        </div>
-
-        {business.descriptionAr && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {business.descriptionAr}
-          </p>
-        )}
-
-        <div className="space-y-1.5 text-xs text-muted-foreground">
-          {business.addressAr && (
-            <div className="flex items-start gap-1.5">
-              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span className="line-clamp-1">{business.addressAr}</span>
-            </div>
-          )}
-          {phone && (
-            <div className="flex items-center gap-1.5">
-              <Phone className="h-3.5 w-3.5 shrink-0" />
-              <a href={`tel:${phone}`} dir="ltr" className="hover:text-accent">
-                {phone}
-              </a>
-            </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 shrink-0" />
-            {status.open ? (
-              <span className="text-[var(--color-accent)] font-semibold">
-                مفتوح الآن{status.closeTime ? ` حتى ${status.closeTime}` : ""}
-              </span>
-            ) : (
-              <span>مغلق الآن</span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-auto pt-3">
-          <Link href={`/businesses/${business.slug}`} className="block">
-            <Button variant="accent" size="sm" className="w-full">
-              التفاصيل
-            </Button>
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
