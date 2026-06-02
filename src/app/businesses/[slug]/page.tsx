@@ -28,6 +28,7 @@ import { RatingSummary } from "@/components/business/RatingSummary";
 import { CommentSection } from "@/components/business/CommentSection";
 import { MediaGallery } from "@/components/business/MediaGallery";
 import { SocialLinks } from "@/components/business/SocialLinks";
+import { VerifiedBadge } from "@/components/business/VerifiedBadge";
 
 export default async function BusinessDetailPage({
   params,
@@ -63,6 +64,7 @@ export default async function BusinessDetailPage({
     await trackBusinessView(business.id);
   }
 
+  const isVerified = business.verificationStatus === "VERIFIED";
   const status = isOpenNow(business.workingHours);
   const phones = business.phones;
   const whatsappPhone = phones.find((p) => p.label === "WHATSAPP")?.number ?? phones[0]?.number;
@@ -73,7 +75,7 @@ export default async function BusinessDetailPage({
     .filter((m) => m.type === "VIDEO")
     .map((m) => ({ id: m.id, url: m.url }));
   const CategoryIcon = getCategoryIcon(business.category.slug);
-  const initial = business.nameAr.replace(/^(ال|دكتور|د\.|عيادة|مطعم|كافيه|ورشة|سوبرماركت|صيدلية|مدرسة|محل)\s*/, "").trim().charAt(0)
+  const initial = business.nameAr.replace(/^(\u0627\u0644|\u062f\u0643\u062a\u0648\u0631|\u062f\.\u200c|\u0639\u064a\u0627\u062f\u0629|\u0645\u0637\u0639\u0645|\u0643\u0627\u0641\u064a\u0647|\u0648\u0631\u0634\u0629|\u0633\u0648\u0628\u0631\u0645\u0627\u0631\u0643\u062a|\u0635\u064a\u062f\u0644\u064a\u0629|\u0645\u062f\u0631\u0633\u0629|\u0645\u062d\u0644)\s*/, "").trim().charAt(0)
     || business.nameAr.charAt(0);
 
   return (
@@ -107,6 +109,8 @@ export default async function BusinessDetailPage({
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-3xl font-bold md:text-4xl">{business.nameAr}</h1>
+                  {/* Verified badge next to name */}
+                  {isVerified && <VerifiedBadge size="md" />}
                   {status.open ? (
                     <Badge variant="accent">مفتوح الآن</Badge>
                   ) : (
