@@ -35,7 +35,7 @@ export async function getActiveBusinesses(opts?: {
             ],
           }
         : {}),
-      ...(opts?.verifiedOnly ? { verificationStatus: "APPROVED" } : {}),
+      ...(opts?.verifiedOnly ? { verificationStatus: "VERIFIED" } : {}),
       ...(opts?.hasPhone ? { phones: { some: {} } } : {}),
     },
     include: businessCardInclude,
