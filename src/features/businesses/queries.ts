@@ -6,6 +6,11 @@ const businessCardInclude = {
   subcategory: true,
   phones: { orderBy: { displayOrder: "asc" } },
   workingHours: true,
+  media_files: {
+    where: { status: "APPROVED", type: "IMAGE" },
+    orderBy: { displayOrder: "asc" },
+    take: 1,
+  },
 } satisfies Prisma.BusinessProfileInclude;
 
 export type BusinessCardData = Prisma.BusinessProfileGetPayload<{
