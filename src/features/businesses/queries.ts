@@ -17,6 +17,8 @@ export async function getActiveBusinesses(opts?: {
   search?: string;
   limit?: number;
   orderBy?: "recent" | "rating";
+  verifiedOnly?: boolean;
+  hasPhone?: boolean;
 }): Promise<BusinessCardData[]> {
   return prisma.businessProfile.findMany({
     where: {
@@ -33,6 +35,8 @@ export async function getActiveBusinesses(opts?: {
             ],
           }
         : {}),
+      ...(opts?.verifiedOnly ? { isVerified: true } : {}),
+      ...(opts?.hasPhone ? { phones: { some: {} } } : {}),
     },
     include: businessCardInclude,
     orderBy:
