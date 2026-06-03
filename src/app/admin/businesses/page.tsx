@@ -26,10 +26,10 @@ const VERIF_TABS: Array<{ value: VerificationStatus | "ALL_VERIF"; label: string
 
 const VERIF_BADGE: Record<
   VerificationStatus,
-  "outline" | "accent" | "destructive" | "secondary"
+  "outline" | "accent" | "destructive" | "warning"
 > = {
   UNVERIFIED: "outline",
-  PENDING: "secondary",
+  PENDING: "warning",
   VERIFIED: "accent",
   REJECTED: "destructive",
 };
