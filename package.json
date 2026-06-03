@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "next build && node ./scripts/assemble-standalone.mjs",
+    "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
