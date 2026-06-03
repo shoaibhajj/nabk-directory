@@ -12,11 +12,13 @@
 import Link from "next/link";
 import { FileDown, BookOpen, ExternalLink } from "lucide-react";
 import { getLatestPublishedEdition, getLegacyPdfConfig } from "@/features/pdf/queries";
+import { getLocale } from "next-intl/server";
 
 export async function PdfHeroButtons() {
-  const [legacy, latest] = await Promise.all([
+  const [legacy, latest, locale] = await Promise.all([
     getLegacyPdfConfig(),
     getLatestPublishedEdition(),
+    getLocale(),
   ]);
 
   // LegacyPdfInfo exposes `isActive` (mapped from isPublished) and `fileUrl`
@@ -50,7 +52,7 @@ export async function PdfHeroButtons() {
           {hasLatest && (
             <>
               <Link
-                href={`/pdf/preview/${latest!.id}`}
+                href={`/${locale}/pdf/preview/${latest!.id}`}
                 className="flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-semibold hover:bg-secondary/40"
               >
                 <BookOpen className="h-4 w-4 text-accent" />
@@ -58,7 +60,7 @@ export async function PdfHeroButtons() {
               </Link>
 
               <Link
-                href="/pdf"
+                href={`/${locale}/pdf`}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
               >
                 كل الإصدارات
@@ -68,7 +70,7 @@ export async function PdfHeroButtons() {
           )}
         </div>
 
-        {/* Stats row — uses createdAt (available in select) instead of finishedAt */}
+        {/* Stats row */}
         {latest?.generationJobs[0] && (
           <p className="mt-3 text-center text-xs text-muted-foreground">
             {[
