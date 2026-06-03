@@ -2,6 +2,7 @@
   "name": "@workspace/nabk-directory",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
