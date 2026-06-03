@@ -98,7 +98,6 @@ function VerificationModal({
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
         <h2 className="mb-4 text-lg font-bold">تعديل حالة التوثيق</h2>
 
-        {/* Status selector */}
         <div className="mb-4">
           <label className="mb-1 block text-sm font-medium">الحالة الجديدة</label>
           <div className="flex gap-2 flex-wrap">
@@ -119,7 +118,6 @@ function VerificationModal({
           </div>
         </div>
 
-        {/* Admin note */}
         <div className="mb-4">
           <label className="mb-1 block text-sm font-medium">
             ملاحظة الإدارة{" "}
@@ -134,7 +132,6 @@ function VerificationModal({
           />
         </div>
 
-        {/* Cloudinary image upload */}
         <div className="mb-4">
           <label className="mb-1 block text-sm font-medium">
             صورة مستند داعم{" "}
@@ -148,12 +145,7 @@ function VerificationModal({
               className="flex-1 text-sm"
             />
             {file && !uploadedUrl ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={uploadFile}
-                disabled={uploadPending}
-              >
+              <Button size="sm" variant="outline" onClick={uploadFile} disabled={uploadPending}>
                 {uploadPending ? "جارِ الرفع..." : "رفع"}
               </Button>
             ) : null}
@@ -165,9 +157,7 @@ function VerificationModal({
           ) : null}
         </div>
 
-        {error ? (
-          <p className="mb-3 text-sm text-destructive">{error}</p>
-        ) : null}
+        {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
 
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={submit} disabled={pending}>
@@ -183,12 +173,6 @@ function VerificationModal({
 }
 
 // ─── Main BusinessActions ────────────────────────────────────────────
-const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
-  UNVERIFIED: "غير موثّق",
-  PENDING: "بانتظار مراجعة التوثيق",
-  VERIFIED: "موثّق",
-  REJECTED: "مرفوض التوثيق",
-};
 export function BusinessActions({
   businessId,
   status,
@@ -257,22 +241,13 @@ export function BusinessActions({
         />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={submitReason}
-            disabled={pending}
-          >
+          <Button variant="primary" size="sm" onClick={submitReason} disabled={pending}>
             {pending ? "جارِ الإرسال..." : "تأكيد"}
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setMode(null);
-              setReason("");
-              setError(null);
-            }}
+            onClick={() => { setMode(null); setReason(""); setError(null); }}
             disabled={pending}
           >
             إلغاء
@@ -294,7 +269,6 @@ export function BusinessActions({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {/* Business status actions */}
         {status === "DRAFT" ? (
           <>
             <Button variant="primary" size="sm" onClick={approve} disabled={pending}>
@@ -316,10 +290,8 @@ export function BusinessActions({
           </Button>
         ) : null}
 
-        {/* Divider */}
         <span className="h-4 w-px bg-border" aria-hidden />
 
-        {/* Verification badge + action button */}
         <Badge variant={VERIFICATION_BADGE[verificationStatus]}>
           {VERIFICATION_LABELS[verificationStatus]}
         </Badge>
