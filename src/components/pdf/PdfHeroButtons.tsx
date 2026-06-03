@@ -12,16 +12,16 @@
 import Link from "next/link";
 import { FileDown, BookOpen, ExternalLink } from "lucide-react";
 import { getLatestPublishedEdition, getLegacyPdfConfig } from "@/features/pdf/queries";
-import { getLocale } from "next-intl/server";
+
+// Default locale — Arabic is the app default
+const DEFAULT_LOCALE = "ar";
 
 export async function PdfHeroButtons() {
-  const [legacy, latest, locale] = await Promise.all([
+  const [legacy, latest] = await Promise.all([
     getLegacyPdfConfig(),
     getLatestPublishedEdition(),
-    getLocale(),
   ]);
 
-  // LegacyPdfInfo exposes `isActive` (mapped from isPublished) and `fileUrl`
   const hasLegacy = legacy?.isActive && legacy.fileUrl;
   const hasLatest = !!latest;
 
@@ -52,7 +52,7 @@ export async function PdfHeroButtons() {
           {hasLatest && (
             <>
               <Link
-                href={`/${locale}/pdf/preview/${latest!.id}`}
+                href={`/${DEFAULT_LOCALE}/pdf/preview/${latest!.id}`}
                 className="flex items-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-semibold hover:bg-secondary/40"
               >
                 <BookOpen className="h-4 w-4 text-accent" />
@@ -60,7 +60,7 @@ export async function PdfHeroButtons() {
               </Link>
 
               <Link
-                href={`/${locale}/pdf`}
+                href={`/${DEFAULT_LOCALE}/pdf`}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
               >
                 كل الإصدارات
