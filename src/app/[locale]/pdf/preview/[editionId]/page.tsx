@@ -24,7 +24,7 @@ export default async function EditionPreviewPage({
       <main className="container mx-auto max-w-3xl px-4 py-10">
         {/* Back */}
         <Link
-          href="/pdf"
+          href="ar/pdf"
           className="mb-6 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4 rotate-180" />
