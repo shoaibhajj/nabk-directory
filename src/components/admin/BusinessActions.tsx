@@ -25,15 +25,15 @@ const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
 
 const VERIFICATION_BADGE: Record<
   VerificationStatus,
-  "outline" | "accent" | "destructive" | "secondary"
+  "outline" | "accent" | "destructive" | "warning"
 > = {
   UNVERIFIED: "outline",
-  PENDING: "secondary",
+  PENDING: "warning",
   VERIFIED: "accent",
   REJECTED: "destructive",
 };
 
-// ─── Verification Modal ──────────────────────────────────────────────────────
+// ─── Verification Modal ────────────────────────────────────────────────
 function VerificationModal({
   businessId,
   currentStatus,
@@ -134,7 +134,7 @@ function VerificationModal({
           />
         </div>
 
-        {/* Cloudinary image upload — optional supporting document */}
+        {/* Cloudinary image upload */}
         <div className="mb-4">
           <label className="mb-1 block text-sm font-medium">
             صورة مستند داعم{" "}
@@ -154,7 +154,7 @@ function VerificationModal({
                 onClick={uploadFile}
                 disabled={uploadPending}
               >
-                {uploadPending ? "جارٍ الرفع..." : "رفع"}
+                {uploadPending ? "جارِ الرفع..." : "رفع"}
               </Button>
             ) : null}
           </div>
@@ -171,7 +171,7 @@ function VerificationModal({
 
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={submit} disabled={pending}>
-            {pending ? "جارٍ الحفظ..." : "حفظ"}
+            {pending ? "جارِ الحفظ..." : "حفظ"}
           </Button>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
             إلغاء
@@ -182,7 +182,13 @@ function VerificationModal({
   );
 }
 
-// ─── Main BusinessActions ────────────────────────────────────────────────────
+// ─── Main BusinessActions ────────────────────────────────────────────
+const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
+  UNVERIFIED: "غير موثّق",
+  PENDING: "بانتظار مراجعة التوثيق",
+  VERIFIED: "موثّق",
+  REJECTED: "مرفوض التوثيق",
+};
 export function BusinessActions({
   businessId,
   status,
@@ -257,7 +263,7 @@ export function BusinessActions({
             onClick={submitReason}
             disabled={pending}
           >
-            {pending ? "جارٍ الإرسال..." : "تأكيد"}
+            {pending ? "جارِ الإرسال..." : "تأكيد"}
           </Button>
           <Button
             variant="ghost"
