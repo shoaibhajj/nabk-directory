@@ -9,9 +9,9 @@ import { DownloadPdfButton } from "@/components/pdf/DownloadPdfButton";
 export default async function EditionPreviewPage({
   params,
 }: {
-  params: Promise<{ editionId: string }>;
+  params: Promise<{ locale: string; editionId: string }>;
 }) {
-  const { editionId } = await params;
+  const { editionId, locale } = await params;
   const edition = await getPublishedEditionById(editionId);
   if (!edition) notFound();
 
@@ -24,7 +24,7 @@ export default async function EditionPreviewPage({
       <main className="container mx-auto max-w-3xl px-4 py-10">
         {/* Back */}
         <Link
-          href="ar/pdf"
+          href={`/${locale}/pdf`}
           className="mb-6 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4 rotate-180" />
