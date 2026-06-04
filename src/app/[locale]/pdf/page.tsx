@@ -123,7 +123,7 @@ export default async function PdfDirectoryPage() {
                       <div className="flex gap-2">
                         <DownloadPdfButton editionId={ed.id} />
                         <Link
-                          href={`ar/pdf/preview/${ed.id}`}
+                          href={`/pdf/preview/${ed.id}`}
                           className="flex-1 rounded-lg border border-border px-3 py-2 text-center text-xs font-semibold hover:bg-secondary/40"
                         >
                           معاينة
