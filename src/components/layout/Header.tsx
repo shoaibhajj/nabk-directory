@@ -3,10 +3,12 @@ import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Store, Info, Mail, Inbox } from "lucide-react";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { getAppUrl } from "@/lib/utils";
 
 export async function Header() {
   const session = await auth();
   const user = session?.user;
+  const appUrl = getAppUrl();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/90 backdrop-blur-sm">
@@ -51,13 +53,13 @@ export async function Header() {
                 <Inbox className="h-4 w-4" /> رسائلي
               </Link>
               {user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? (
-                <Link href="/admin">
+                <Link href="/ar/admin">
                   <Button variant="ghost" size="sm">
                     الإدارة
                   </Button>
                 </Link>
               ) : null}
-              <Link href="/dashboard">
+              <Link href="/ar/dashboard">
                 <Button variant="outline" size="sm">
                   لوحة التحكم
                 </Button>
@@ -65,7 +67,7 @@ export async function Header() {
               <form
                 action={async () => {
                   "use server";
-                  await signOut({ redirectTo: "/" });
+                  await signOut({ redirectTo: `${appUrl}/` });
                 }}
               >
                 <Button type="submit" variant="ghost" size="sm">
