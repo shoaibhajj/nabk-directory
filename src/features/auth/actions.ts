@@ -110,7 +110,7 @@ export async function signInAction(
     await signIn("credentials", {
       email: parsed.data.email.toLowerCase(),
       password: parsed.data.password,
-      redirectTo: `${getAppUrl()}/ar/dashboard`,
+      redirectTo: `${getAppUrl()}/dashboard`,
     });
     return { error: undefined };
   } catch (e) {
@@ -125,7 +125,7 @@ export async function signInAction(
  * so a plain <a href> GET request causes UnknownAction error.
  */
 export async function signInWithGoogleAction() {
-  await signIn("google", { redirectTo: `${getAppUrl()}/ar/dashboard` });
+  await signIn("google", { redirectTo: `${getAppUrl()}/dashboard` });
 }
 
 export async function signOutAndRedirect() {
@@ -177,7 +177,7 @@ export async function verifyEmailAction(
 export async function autoSignInAfterVerify(loginToken: string) {
   await signIn("credentials", {
     oneTimeToken: loginToken,
-    redirectTo: `${getAppUrl()}/ar/dashboard`,
+    redirectTo: `${getAppUrl()}/dashboard`,
   });
 }
 
