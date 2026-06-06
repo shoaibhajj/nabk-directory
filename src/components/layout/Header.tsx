@@ -59,7 +59,7 @@ export async function Header() {
                   </Button>
                 </Link>
               ) : null}
-              <Link href="/ar/dashboard">
+              <Link href="/dashboard">
                 <Button variant="outline" size="sm">
                   لوحة التحكم
                 </Button>
