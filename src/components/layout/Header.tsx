@@ -53,7 +53,7 @@ export async function Header() {
                 <Inbox className="h-4 w-4" /> رسائلي
               </Link>
               {user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? (
-                <Link href="/ar/admin">
+                <Link href="/admin">
                   <Button variant="ghost" size="sm">
                     الإدارة
                   </Button>
