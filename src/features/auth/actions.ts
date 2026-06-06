@@ -105,10 +105,12 @@ export async function signInAction(
   if (!parsed.success) return { error: "بيانات غير صحيحة" };
 
   try {
+    // Use absolute URL to avoid Auth.js resolving against NEXTAUTH_URL
+    // which may be stale (localhost) in some environments.
     await signIn("credentials", {
       email: parsed.data.email.toLowerCase(),
       password: parsed.data.password,
-      redirectTo: "/dashboard",
+      redirectTo: `${getAppUrl()}/ar/dashboard`,
     });
     return { error: undefined };
   } catch (e) {
@@ -123,7 +125,7 @@ export async function signInAction(
  * so a plain <a href> GET request causes UnknownAction error.
  */
 export async function signInWithGoogleAction() {
-  await signIn("google", { redirectTo: "/dashboard" });
+  await signIn("google", { redirectTo: `${getAppUrl()}/ar/dashboard` });
 }
 
 export async function signOutAndRedirect() {
@@ -173,7 +175,10 @@ export async function verifyEmailAction(
 }
 
 export async function autoSignInAfterVerify(loginToken: string) {
-  await signIn("credentials", { oneTimeToken: loginToken, redirectTo: "/dashboard" });
+  await signIn("credentials", {
+    oneTimeToken: loginToken,
+    redirectTo: `${getAppUrl()}/ar/dashboard`,
+  });
 }
 
 const forgotSchema = z.object({ email: z.string().email() });
@@ -227,7 +232,7 @@ export async function resetPasswordAction(
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "بيانات غير صحيحة" };
+    return { error: parsed.error.issues[0]?.message ?? "بيانات غير صحيدة" };
   }
   const record = await prisma.passwordResetToken.findUnique({
     where: { tokenHash: hashToken(parsed.data.token) },
