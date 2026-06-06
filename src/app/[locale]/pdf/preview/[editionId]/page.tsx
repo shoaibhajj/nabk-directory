@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { getPublishedEditionById } from "@/features/pdf/queries";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { DownloadPdfButton } from "@/components/pdf/DownloadPdfButton";
+import { PublicDownloadButton } from "@/components/pdf/PublicDownloadButton";
 
 export default async function EditionPreviewPage({
   params,
@@ -16,6 +16,7 @@ export default async function EditionPreviewPage({
   if (!edition) notFound();
 
   const lastJob = edition.generationJobs[0];
+  const fileUrl = lastJob?.outputFileUrl ?? null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,7 +64,18 @@ export default async function EditionPreviewPage({
             </div>
           )}
 
-          <DownloadPdfButton editionId={edition.id} fullWidth />
+          {/* Download button — public, uses pre-generated file */}
+          {fileUrl ? (
+            <PublicDownloadButton
+              fileUrl={fileUrl}
+              filename={`${edition.titleAr}.pdf`}
+              fullWidth
+            />
+          ) : (
+            <div className="w-full rounded-lg bg-muted px-4 py-3 text-center text-sm text-muted-foreground">
+              الملف غير متاح حالياً
+            </div>
+          )}
         </div>
 
         {/* Cover text blocks */}

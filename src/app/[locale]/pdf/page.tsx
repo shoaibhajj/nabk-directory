@@ -3,10 +3,9 @@ import Link from "next/link";
 import { FileDown, BookOpen, Calendar } from "lucide-react";
 import { getPublishedEditions, getLegacyPdfConfig } from "@/features/pdf/queries";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { DownloadPdfButton } from "@/components/pdf/DownloadPdfButton";
+import { PublicDownloadButton } from "@/components/pdf/PublicDownloadButton";
 
 export const metadata: Metadata = {
   title: "دليل النبك — تحميل PDF",
@@ -99,6 +98,7 @@ export default async function PdfDirectoryPage({
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {editions.map((ed) => {
                 const lastJob = ed.generationJobs[0];
+                const fileUrl = lastJob?.outputFileUrl ?? null;
                 return (
                   <Card key={ed.id} className="overflow-hidden">
                     <CardContent className="p-5">
@@ -126,7 +126,13 @@ export default async function PdfDirectoryPage({
                       )}
 
                       <div className="flex gap-2">
-                        <DownloadPdfButton editionId={ed.id} />
+                        {fileUrl ? (
+                          <PublicDownloadButton fileUrl={fileUrl} filename={`${ed.titleAr}.pdf`} />
+                        ) : (
+                          <span className="flex-1 rounded-lg bg-muted px-4 py-2.5 text-center text-xs text-muted-foreground">
+                            الملف غير متاح
+                          </span>
+                        )}
                         <Link
                           href={`/${locale}/pdf/preview/${ed.id}`}
                           className="flex-1 rounded-lg border border-border px-3 py-2 text-center text-xs font-semibold hover:bg-secondary/40"
@@ -146,8 +152,8 @@ export default async function PdfDirectoryPage({
         {editions.length === 0 && !legacy?.isActive && (
           <div className="py-20 text-center text-muted-foreground">
             <FileDown className="mx-auto mb-4 h-12 w-12 opacity-30" />
-            <p className="text-lg font-semibold">لا يوجد إصدار متاح حاليًا.</p>
-            <p className="mt-1 text-sm">سيتم نشر الدليل قريبًا.</p>
+            <p className="text-lg font-semibold">لا يوجد إصدار متاح حالياً.</p>
+            <p className="mt-1 text-sm">سيتم نشر الدليل قريباً.</p>
           </div>
         )}
       </main>
