@@ -19,7 +19,12 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default async function PdfDirectoryPage() {
+export default async function PdfDirectoryPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
   const [editions, legacy] = await Promise.all([
     getPublishedEditions(),
     getLegacyPdfConfig(),
@@ -123,7 +128,7 @@ export default async function PdfDirectoryPage() {
                       <div className="flex gap-2">
                         <DownloadPdfButton editionId={ed.id} />
                         <Link
-                          href={`ar/pdf/preview/${ed.id}`}
+                          href={`/${locale}/pdf/preview/${ed.id}`}
                           className="flex-1 rounded-lg border border-border px-3 py-2 text-center text-xs font-semibold hover:bg-secondary/40"
                         >
                           معاينة
@@ -141,8 +146,8 @@ export default async function PdfDirectoryPage() {
         {editions.length === 0 && !legacy?.isActive && (
           <div className="py-20 text-center text-muted-foreground">
             <FileDown className="mx-auto mb-4 h-12 w-12 opacity-30" />
-            <p className="text-lg font-semibold">لا يوجد إصدار متاح حالياً.</p>
-            <p className="mt-1 text-sm">سيتم نشر الدليل قريباً.</p>
+            <p className="text-lg font-semibold">لا يوجد إصدار متاح حاليًا.</p>
+            <p className="mt-1 text-sm">سيتم نشر الدليل قريبًا.</p>
           </div>
         )}
       </main>
