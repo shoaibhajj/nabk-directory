@@ -16,7 +16,7 @@ export default async function EditionPreviewPage({
   if (!edition) notFound();
 
   const lastJob = edition.generationJobs[0];
-  const fileUrl = lastJob?.outputFileUrl ?? null;
+  const hasFile = Boolean(lastJob?.outputFileUrl);
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,7 +50,14 @@ export default async function EditionPreviewPage({
           {lastJob && (
             <div className="mb-5 grid grid-cols-3 gap-3 rounded-xl bg-background p-4">
               <Stat label="عدد الصفحات" value={lastJob.pagesCount ?? "—"} />
-              <Stat label="حجم الملف" value={lastJob.fileSizeBytes ? `${(lastJob.fileSizeBytes / 1024).toFixed(0)} KB` : "—"} />
+              <Stat
+                label="حجم الملف"
+                value={
+                  lastJob.fileSizeBytes
+                    ? `${(lastJob.fileSizeBytes / 1024).toFixed(0)} KB`
+                    : "—"
+                }
+              />
               <Stat
                 label="تاريخ التوليد"
                 value={
@@ -64,10 +71,10 @@ export default async function EditionPreviewPage({
             </div>
           )}
 
-          {/* Download button — public, uses pre-generated file */}
-          {fileUrl ? (
+          {/* Download button — proxied through our API */}
+          {hasFile ? (
             <PublicDownloadButton
-              fileUrl={fileUrl}
+              editionId={editionId}
               filename={`${edition.titleAr}.pdf`}
               fullWidth
             />

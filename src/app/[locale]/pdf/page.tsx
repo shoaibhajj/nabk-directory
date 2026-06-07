@@ -98,7 +98,7 @@ export default async function PdfDirectoryPage({
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {editions.map((ed) => {
                 const lastJob = ed.generationJobs[0];
-                const fileUrl = lastJob?.outputFileUrl ?? null;
+                const hasFile = Boolean(lastJob?.outputFileUrl);
                 return (
                   <Card key={ed.id} className="overflow-hidden">
                     <CardContent className="p-5">
@@ -126,8 +126,11 @@ export default async function PdfDirectoryPage({
                       )}
 
                       <div className="flex gap-2">
-                        {fileUrl ? (
-                          <PublicDownloadButton fileUrl={fileUrl} filename={`${ed.titleAr}.pdf`} />
+                        {hasFile ? (
+                          <PublicDownloadButton
+                            editionId={ed.id}
+                            filename={`${ed.titleAr}.pdf`}
+                          />
                         ) : (
                           <span className="flex-1 rounded-lg bg-muted px-4 py-2.5 text-center text-xs text-muted-foreground">
                             الملف غير متاح
