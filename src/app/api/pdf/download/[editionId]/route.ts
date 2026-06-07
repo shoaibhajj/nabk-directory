@@ -1,9 +1,9 @@
 /**
  * GET /api/pdf/download/[editionId]
  *
- * Public route — no auth required.
- * Fetches the PDF from Cloudinary and streams it as an attachment download.
- * This avoids CORS issues when the browser tries to fetch Cloudinary directly.
+ * Public proxy — no auth required.
+ * Fetches PDF from Cloudinary server-side (bypasses "untrusted customer" block)
+ * and streams it as a forced attachment download.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getPublishedEditionById } from "@/features/pdf/queries";
@@ -27,10 +27,16 @@ export async function GET(
     return new NextResponse("File not available", { status: 404 });
   }
 
-  // Fetch from Cloudinary server-side (no CORS restriction here)
-  const upstream = await fetch(fileUrl);
+  // Fetch from Cloudinary on the server — no CORS / untrusted-customer block here
+  const upstream = await fetch(fileUrl, {
+    headers: { Accept: "application/pdf" },
+  });
+
   if (!upstream.ok) {
-    return new NextResponse("Failed to fetch file", { status: 502 });
+    return new NextResponse(
+      `Failed to fetch file: ${upstream.status}`,
+      { status: 502 },
+    );
   }
 
   const buffer = await upstream.arrayBuffer();
@@ -40,9 +46,10 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
+      // attachment — forces Save As dialog in the browser
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "Content-Length": String(buffer.byteLength),
-      "Cache-Control": "public, max-age=86400",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 }

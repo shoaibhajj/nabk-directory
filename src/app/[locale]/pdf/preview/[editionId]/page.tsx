@@ -16,14 +16,13 @@ export default async function EditionPreviewPage({
   if (!edition) notFound();
 
   const lastJob = edition.generationJobs[0];
-  const fileUrl = lastJob?.outputFileUrl ?? null;
+  const hasFile = Boolean(lastJob?.outputFileUrl);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container mx-auto max-w-3xl px-4 py-10">
-        {/* Back */}
         <Link
           href={`/${locale}/pdf`}
           className="mb-6 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -32,7 +31,6 @@ export default async function EditionPreviewPage({
           العودة للدليل
         </Link>
 
-        {/* Header */}
         <div className="mb-8 rounded-2xl border border-border bg-secondary/20 p-6">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -46,17 +44,12 @@ export default async function EditionPreviewPage({
             </span>
           </div>
 
-          {/* Stats */}
           {lastJob && (
             <div className="mb-5 grid grid-cols-3 gap-3 rounded-xl bg-background p-4">
               <Stat label="عدد الصفحات" value={lastJob.pagesCount ?? "—"} />
               <Stat
                 label="حجم الملف"
-                value={
-                  lastJob.fileSizeBytes
-                    ? `${(lastJob.fileSizeBytes / 1024).toFixed(0)} KB`
-                    : "—"
-                }
+                value={lastJob.fileSizeBytes ? `${(lastJob.fileSizeBytes / 1024).toFixed(0)} KB` : "—"}
               />
               <Stat
                 label="تاريخ التوليد"
@@ -71,10 +64,9 @@ export default async function EditionPreviewPage({
             </div>
           )}
 
-          {/* Download button — direct Cloudinary URL */}
-          {fileUrl ? (
+          {hasFile ? (
             <PublicDownloadButton
-              fileUrl={fileUrl}
+              editionId={editionId}
               filename={`${edition.titleAr}.pdf`}
               fullWidth
             />
@@ -85,7 +77,6 @@ export default async function EditionPreviewPage({
           )}
         </div>
 
-        {/* Cover text blocks */}
         {edition.coverTitleAr && (
           <div className="mb-5">
             <h2 className="text-lg font-semibold">{edition.coverTitleAr}</h2>
@@ -98,35 +89,20 @@ export default async function EditionPreviewPage({
         {edition.introTextAr && (
           <div className="mb-6 rounded-xl border border-border bg-secondary/20 p-5">
             <h3 className="mb-2 font-semibold">كلمة التقديم</h3>
-            <p className="whitespace-pre-line text-sm leading-7 text-muted-foreground">
-              {edition.introTextAr}
-            </p>
+            <p className="whitespace-pre-line text-sm leading-7 text-muted-foreground">{edition.introTextAr}</p>
           </div>
         )}
 
-        {/* What's inside */}
         <div className="rounded-xl border border-border p-5">
           <h3 className="mb-3 font-semibold">ماذا يتضمن الدليل؟</h3>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-center gap-2">
-              <span className="text-accent">✔</span>
-              جميع الأعمال والخدمات مرتبة حسب التصنيف
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-accent">✔</span>
-              أرقام الهاتف ومعلومات التواصل
-            </li>
+            <li className="flex items-center gap-2"><span className="text-accent">✔</span> جميع الأعمال والخدمات مرتبة حسب التصنيف</li>
+            <li className="flex items-center gap-2"><span className="text-accent">✔</span> أرقام الهاتف ومعلومات التواصل</li>
             {edition.includeQrCodes && (
-              <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span>
-                كود QR لكل عمل
-              </li>
+              <li className="flex items-center gap-2"><span className="text-accent">✔</span> كود QR لكل عمل</li>
             )}
             {edition.includeAlphabeticalIndex && (
-              <li className="flex items-center gap-2">
-                <span className="text-accent">✔</span>
-                فهرس أبجدي
-              </li>
+              <li className="flex items-center gap-2"><span className="text-accent">✔</span> فهرس أبجدي</li>
             )}
           </ul>
         </div>
@@ -137,13 +113,7 @@ export default async function EditionPreviewPage({
   );
 }
 
-function Stat({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | string;
-}) {
+function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="text-center">
       <p className="text-2xl font-bold text-accent">

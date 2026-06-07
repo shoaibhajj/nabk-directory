@@ -33,7 +33,6 @@ export default async function PdfDirectoryPage({
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Hero */}
       <section className="gradient-hero">
         <div className="container mx-auto px-4 py-14 text-center">
           <span className="inline-block rounded-full bg-secondary px-4 py-1.5 text-sm font-semibold text-accent">
@@ -50,7 +49,6 @@ export default async function PdfDirectoryPage({
 
       <main className="container mx-auto px-4 py-12">
 
-        {/* Legacy PDF block */}
         {legacy?.isActive && legacy.fileUrl && (
           <div className="mb-10 rounded-2xl border border-accent/30 bg-accent/5 p-6 md:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -62,18 +60,13 @@ export default async function PdfDirectoryPage({
                   </h2>
                 </div>
                 {legacy.descriptionAr && (
-                  <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                    {legacy.descriptionAr}
-                  </p>
+                  <p className="mt-1 max-w-xl text-sm text-muted-foreground">{legacy.descriptionAr}</p>
                 )}
                 {legacy.publishedAt && (
                   <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" />
-                      {new Date(legacy.publishedAt).toLocaleDateString("ar-SY", {
-                        year: "numeric",
-                        month: "long",
-                      })}
+                      {new Date(legacy.publishedAt).toLocaleDateString("ar-SY", { year: "numeric", month: "long" })}
                     </span>
                   </div>
                 )}
@@ -91,14 +84,13 @@ export default async function PdfDirectoryPage({
           </div>
         )}
 
-        {/* Dynamic editions */}
         {editions.length > 0 && (
           <>
             <h2 className="mb-6 text-2xl font-bold">إصدارات الدليل</h2>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {editions.map((ed) => {
                 const lastJob = ed.generationJobs[0];
-                const fileUrl = lastJob?.outputFileUrl ?? null;
+                const hasFile = Boolean(lastJob?.outputFileUrl);
                 return (
                   <Card key={ed.id} className="overflow-hidden">
                     <CardContent className="p-5">
@@ -116,19 +108,15 @@ export default async function PdfDirectoryPage({
 
                       {lastJob && (
                         <div className="mb-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          {lastJob.pagesCount && (
-                            <span>{lastJob.pagesCount} صفحة</span>
-                          )}
-                          {lastJob.fileSizeBytes && (
-                            <span>{formatBytes(lastJob.fileSizeBytes)}</span>
-                          )}
+                          {lastJob.pagesCount && <span>{lastJob.pagesCount} صفحة</span>}
+                          {lastJob.fileSizeBytes && <span>{formatBytes(lastJob.fileSizeBytes)}</span>}
                         </div>
                       )}
 
                       <div className="flex gap-2">
-                        {fileUrl ? (
+                        {hasFile ? (
                           <PublicDownloadButton
-                            fileUrl={fileUrl}
+                            editionId={ed.id}
                             filename={`${ed.titleAr}.pdf`}
                           />
                         ) : (
@@ -151,7 +139,6 @@ export default async function PdfDirectoryPage({
           </>
         )}
 
-        {/* Empty state */}
         {editions.length === 0 && !legacy?.isActive && (
           <div className="py-20 text-center text-muted-foreground">
             <FileDown className="mx-auto mb-4 h-12 w-12 opacity-30" />
