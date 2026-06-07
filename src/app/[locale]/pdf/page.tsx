@@ -98,7 +98,7 @@ export default async function PdfDirectoryPage({
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {editions.map((ed) => {
                 const lastJob = ed.generationJobs[0];
-                const hasFile = Boolean(lastJob?.outputFileUrl);
+                const fileUrl = lastJob?.outputFileUrl ?? null;
                 return (
                   <Card key={ed.id} className="overflow-hidden">
                     <CardContent className="p-5">
@@ -126,9 +126,9 @@ export default async function PdfDirectoryPage({
                       )}
 
                       <div className="flex gap-2">
-                        {hasFile ? (
+                        {fileUrl ? (
                           <PublicDownloadButton
-                            editionId={ed.id}
+                            fileUrl={fileUrl}
                             filename={`${ed.titleAr}.pdf`}
                           />
                         ) : (

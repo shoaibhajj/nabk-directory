@@ -16,7 +16,7 @@ export default async function EditionPreviewPage({
   if (!edition) notFound();
 
   const lastJob = edition.generationJobs[0];
-  const hasFile = Boolean(lastJob?.outputFileUrl);
+  const fileUrl = lastJob?.outputFileUrl ?? null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,10 +71,10 @@ export default async function EditionPreviewPage({
             </div>
           )}
 
-          {/* Download button — proxied through our API */}
-          {hasFile ? (
+          {/* Download button — direct Cloudinary URL */}
+          {fileUrl ? (
             <PublicDownloadButton
-              editionId={editionId}
+              fileUrl={fileUrl}
               filename={`${edition.titleAr}.pdf`}
               fullWidth
             />
