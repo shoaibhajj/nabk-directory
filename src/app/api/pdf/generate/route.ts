@@ -3,8 +3,8 @@
  *
  * Accepts { editionId, isPreview? } in the JSON body.
  * Generates the PDF, records a PdfGenerationJob, and:
- *   - isPreview=false → Content-Disposition: attachment (download)
- *   - isPreview=true  → Content-Disposition: inline (opens in browser tab)
+ *   - isPreview=true  → returns PDF inline (opens in browser tab) — NOT uploaded
+ *   - isPreview=false → uploads to Cloudinary, saves outputFileUrl, returns attachment download
  *
  * Auth: ADMIN or SUPER_ADMIN only.
  */
@@ -14,6 +14,7 @@ import { requireAdmin } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { loadPdfEditionData } from "@/lib/pdf/data-loader";
 import { generatePdf } from "@/lib/pdf/generator";
+import { uploadPdfToCloudinary } from "@/lib/cloudinary-pdf";
 import { AuditAction } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -73,6 +74,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
+    const filename = isPreview
+      ? `preview-${input.editionSlug}.pdf`
+      : `${input.editionSlug}.pdf`;
+
+    // For final generation: upload to Cloudinary and save the URL
+    let outputFileUrl: string | null = null;
+    if (!isPreview) {
+      try {
+        outputFileUrl = await uploadPdfToCloudinary(
+          result.buffer,
+          `${input.editionSlug}-${job.id}`,
+        );
+      } catch (uploadErr) {
+        const uploadMsg =
+          uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+        console.error("[pdf/generate] Cloudinary upload failed:", uploadMsg);
+        // Mark job as failed if upload fails — no point saving without a URL
+        await prisma.pdfGenerationJob.update({
+          where: { id: job.id },
+          data: {
+            status: "FAILED",
+            errorMessage: `فشل رفع الملف: ${uploadMsg}`,
+            finishedAt: new Date(),
+          },
+        });
+        return NextResponse.json(
+          { error: `فشل رفع الملف إلى التخزين: ${uploadMsg}` },
+          { status: 500 },
+        );
+      }
+    }
+
     await prisma.pdfGenerationJob.update({
       where: { id: job.id },
       data: {
@@ -80,6 +113,7 @@ export async function POST(req: NextRequest) {
         pagesCount: result.pagesCount,
         fileSizeBytes: result.buffer.length,
         finishedAt: new Date(),
+        ...(outputFileUrl ? { outputFileUrl } : {}),
       },
     });
 
@@ -95,13 +129,10 @@ export async function POST(req: NextRequest) {
           jobId: job.id,
           pagesCount: result.pagesCount,
           isPreview,
+          outputFileUrl,
         },
       },
     });
-
-    const filename = isPreview
-      ? `preview-${input.editionSlug}.pdf`
-      : `${input.editionSlug}.pdf`;
 
     // isPreview → inline (opens in browser); final → attachment (download)
     const disposition = isPreview
