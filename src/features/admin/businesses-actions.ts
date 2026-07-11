@@ -19,6 +19,8 @@ export type UploadResult =
   | { ok: true; url: string; publicId: string }
   | { ok: false; error: string };
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 async function requireAdmin(): Promise<AuditActor | null> {
   const session = await auth();
   const role = session?.user?.role;
@@ -52,13 +54,14 @@ async function notifyOwner(opts: {
   });
 }
 
+// ─── Schemas ────────────────────────────────────────────────────────────────
+
 const businessIdSchema = z.object({ businessId: z.string().min(1) });
+
 const reasonSchema = z.object({
   businessId: z.string().min(1),
   reason: z.string().trim().min(3).max(500),
 });
-
-// ─── Verification moderation ────────────────────────────────────────────────
 
 const verificationModerationSchema = z.object({
   businessId: z.string().min(1),
@@ -66,8 +69,10 @@ const verificationModerationSchema = z.object({
   adminNote: z.string().trim().max(500).optional(),
 });
 
+// ─── Verification moderation ─────────────────────────────────────────────────
+
 export async function adminUpdateVerificationAction(
-  input: z.infer<typeof verificationModerationSchema>,
+  input: z.infer<typeof verificationModerationSchema>
 ): Promise<ActionResult> {
   const actor = await requireAdmin();
   if (!actor || !actor.id) return { ok: false, error: "غير مسموح." };
@@ -75,7 +80,7 @@ export async function adminUpdateVerificationAction(
   const rl = await withRateLimit(
     `admin-verification:${actor.id}`,
     60,
-    60 * 60 * 1000,
+    60 * 60 * 1000
   );
   if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
 
@@ -95,7 +100,6 @@ export async function adminUpdateVerificationAction(
   const previousStatus = business.verificationStatus;
 
   await prisma.$transaction(async (tx) => {
-    // Update business verification status
     await tx.businessProfile.update({
       where: { id: businessId },
       data: {
@@ -105,7 +109,6 @@ export async function adminUpdateVerificationAction(
       },
     });
 
-    // Update latest pending verification request if exists
     const latestRequest = await tx.verificationRequest.findFirst({
       where: { businessProfileId: businessId, status: "PENDING" },
       orderBy: { createdAt: "desc" },
@@ -123,10 +126,13 @@ export async function adminUpdateVerificationAction(
     }
   });
 
+  // ✅ FIX: audit action منفصل لكل حالة
   const auditAction =
     newStatus === "VERIFIED"
       ? ("BUSINESS_VERIFICATION_APPROVED" as const)
-      : ("BUSINESS_VERIFICATION_REJECTED" as const);
+      : newStatus === "REJECTED"
+      ? ("BUSINESS_VERIFICATION_REJECTED" as const)
+      : ("BUSINESS_VERIFICATION_REVOKED" as const);
 
   await recordAudit({
     actor,
@@ -141,13 +147,15 @@ export async function adminUpdateVerificationAction(
     newStatus === "VERIFIED"
       ? "تم توثيق عملك"
       : newStatus === "REJECTED"
-        ? "تم رفض طلب التوثيق"
-        : "تم إلغاء توثيق عملك";
+      ? "تم رفض طلب التوثيق"
+      : "تم إلغاء توثيق عملك";
 
   const notifMessage =
     newStatus === "VERIFIED"
       ? `تهانينا! تم توثيق «${business.nameAr}» رسمياً في الدليل.`
-      : `«${business.nameAr}» — ${adminNote ?? "تم تغيير حالة التوثيق من قِبَل الإدارة."}` ;
+      : `«${business.nameAr}» — ${
+          adminNote ?? "تم تغيير حالة التوثيق من قِبَل الإدارة."
+        }`;
 
   await notifyOwner({
     userId: business.owner.id,
@@ -163,9 +171,7 @@ export async function adminUpdateVerificationAction(
   return { ok: true };
 }
 
-// ─── Cloudinary secure image upload (server-side validation) ────────────────
-// Only images are accepted. Max 5 MB. Uploaded to a dedicated folder.
-// The raw credentials never leave the server — the client only sends a FormData.
+// ─── Cloudinary secure image upload ─────────────────────────────────────────
 
 const ALLOWED_MIME = new Set([
   "image/jpeg",
@@ -176,35 +182,66 @@ const ALLOWED_MIME = new Set([
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function adminUploadVerificationImageAction(
-  formData: FormData,
+  formData: FormData
 ): Promise<UploadResult> {
   const actor = await requireAdmin();
   if (!actor) return { ok: false, error: "غير مسموح." };
 
+  // ✅ FIX 3: Rate limit على رفع الصور
+  const rl = await withRateLimit(
+    `admin-upload:${actor.id}`,
+    20,
+    60 * 60 * 1000
+  );
+  if (!rl.ok)
+    return { ok: false, error: "تجاوزت حد رفع الصور المسموح (20 صورة/ساعة)." };
+
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "لم يتم إرفاق ملف." };
 
-  // ── Security checks ──────────────────────────────────────────────────
+  // ── Security: MIME type ──────────────────────────────────────────────
   if (!ALLOWED_MIME.has(file.type)) {
-    return { ok: false, error: "نوع الملف غير مسموح. يُقبل فقط: JPEG, PNG, WebP, GIF." };
+    return {
+      ok: false,
+      error: "نوع الملف غير مسموح. يُقبل فقط: JPEG, PNG, WebP, GIF.",
+    };
   }
+
+  // ── Security: File size ──────────────────────────────────────────────
   if (file.size > MAX_BYTES) {
     return { ok: false, error: "حجم الصورة يتجاوز 5 ميغابايت." };
   }
 
-  // ── Read first 8 bytes to validate magic numbers ─────────────────────
+  // ✅ FIX 2: قراءة 12 bytes للتحقق الصحيح من WebP
   const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer.slice(0, 8));
+  const bytes = new Uint8Array(buffer.slice(0, 12));
+
   const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
-  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+  const isPng =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
+  const isGif = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+  // RIFF????WEBP — bytes[0-3]=RIFF, bytes[8-11]=WEBP
   const isWebp =
-    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[6] === 0x57 && bytes[7] === 0x45;
-  const isGif = bytes[0] === 0x47 && bytes[1] === 0x49;
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50;
+
   if (!isJpeg && !isPng && !isWebp && !isGif) {
-    return { ok: false, error: "الملف لا يبدو صورة حقيقية. قد يكون محتوى خبيثاً." };
+    return {
+      ok: false,
+      error: "الملف لا يبدو صورة حقيقية. قد يكون محتوى خبيثاً.",
+    };
   }
 
-  // ── Upload to Cloudinary via REST API ────────────────────────────────
+  // ── Upload to Cloudinary ─────────────────────────────────────────────
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -215,8 +252,14 @@ export async function adminUploadVerificationImageAction(
   const timestamp = Math.round(Date.now() / 1000).toString();
   const folder = "nabk-verification";
 
-  // Build signature: SHA-1("folder=nabk-verification&timestamp=..." + secret)
-  const signaturePayload = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+  // ✅ FIX 1: فرز parameters أبجدياً قبل بناء signature
+  const signParams: Record<string, string> = { folder, timestamp };
+  const signaturePayload =
+    Object.keys(signParams)
+      .sort()
+      .map((k) => `${k}=${signParams[k]}`)
+      .join("&") + apiSecret;
+
   const msgBuffer = new TextEncoder().encode(signaturePayload);
   const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
   const signature = Array.from(new Uint8Array(hashBuffer))
@@ -229,10 +272,11 @@ export async function adminUploadVerificationImageAction(
   uploadForm.append("timestamp", timestamp);
   uploadForm.append("folder", folder);
   uploadForm.append("signature", signature);
+  uploadForm.append("resource_type", "image"); // ✅ صريح
 
   const response = await fetch(
     `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-    { method: "POST", body: uploadForm },
+    { method: "POST", body: uploadForm }
   );
 
   if (!response.ok) {
@@ -241,14 +285,17 @@ export async function adminUploadVerificationImageAction(
     return { ok: false, error: "فشل رفع الصورة إلى Cloudinary." };
   }
 
-  const data = (await response.json()) as { secure_url: string; public_id: string };
+  const data = (await response.json()) as {
+    secure_url: string;
+    public_id: string;
+  };
   return { ok: true, url: data.secure_url, publicId: data.public_id };
 }
 
-// ─── Existing business status actions (unchanged) ──────────────────────────
+// ─── Approve ─────────────────────────────────────────────────────────────────
 
 export async function adminApproveBusinessAction(
-  input: z.infer<typeof businessIdSchema>,
+  input: z.infer<typeof businessIdSchema>
 ): Promise<ActionResult> {
   const actor = await requireAdmin();
   if (!actor || !actor.id) return { ok: false, error: "غير مسموح." };
@@ -256,7 +303,7 @@ export async function adminApproveBusinessAction(
   const rl = await withRateLimit(
     `admin-business-approve:${actor.id}`,
     120,
-    60 * 60 * 1000,
+    60 * 60 * 1000
   );
   if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
 
@@ -286,7 +333,10 @@ export async function adminApproveBusinessAction(
     },
   });
   if (updated.count !== 1) {
-    return { ok: false, error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة." };
+    return {
+      ok: false,
+      error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة.",
+    };
   }
 
   await recordAudit({
@@ -315,7 +365,7 @@ export async function adminApproveBusinessAction(
       html: listingApprovedHtml(
         business.owner.name,
         business.nameAr,
-        `${base}/businesses/${business.slug}`,
+        `${base}/businesses/${business.slug}`
       ),
     });
   }
@@ -325,8 +375,10 @@ export async function adminApproveBusinessAction(
   return { ok: true };
 }
 
+// ─── Reject / Suspend ────────────────────────────────────────────────────────
+
 export async function adminRejectBusinessAction(
-  input: z.infer<typeof reasonSchema>,
+  input: z.infer<typeof reasonSchema>
 ): Promise<ActionResult> {
   const actor = await requireAdmin();
   if (!actor || !actor.id) return { ok: false, error: "غير مسموح." };
@@ -334,12 +386,13 @@ export async function adminRejectBusinessAction(
   const rl = await withRateLimit(
     `admin-business-reject:${actor.id}`,
     120,
-    60 * 60 * 1000,
+    60 * 60 * 1000
   );
   if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
 
   const parsed = reasonSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "السبب مطلوب (3-500 حرفاً)." };
+  if (!parsed.success)
+    return { ok: false, error: "السبب مطلوب (3-500 حرفاً)." };
 
   const business = await prisma.businessProfile.findUnique({
     where: { id: parsed.data.businessId },
@@ -354,11 +407,7 @@ export async function adminRejectBusinessAction(
 
   const previousStatus = business.status;
   const updated = await prisma.businessProfile.updateMany({
-    where: {
-      id: business.id,
-      status: previousStatus,
-      deletedAt: null,
-    },
+    where: { id: business.id, status: previousStatus, deletedAt: null },
     data: {
       status: "SUSPENDED",
       suspendedAt: new Date(),
@@ -366,7 +415,10 @@ export async function adminRejectBusinessAction(
     },
   });
   if (updated.count !== 1) {
-    return { ok: false, error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة." };
+    return {
+      ok: false,
+      error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة.",
+    };
   }
 
   await recordAudit({
@@ -399,7 +451,7 @@ export async function adminRejectBusinessAction(
           business.owner.name,
           business.nameAr,
           parsed.data.reason,
-          `${base}/dashboard`,
+          `${base}/dashboard`
         ),
       });
     } else {
@@ -409,7 +461,7 @@ export async function adminRejectBusinessAction(
         html: listingSuspendedHtml(
           business.owner.name,
           business.nameAr,
-          parsed.data.reason,
+          parsed.data.reason
         ),
       });
     }
@@ -420,8 +472,10 @@ export async function adminRejectBusinessAction(
   return { ok: true };
 }
 
+// ─── Restore ─────────────────────────────────────────────────────────────────
+
 export async function adminRestoreBusinessAction(
-  input: z.infer<typeof businessIdSchema>,
+  input: z.infer<typeof businessIdSchema>
 ): Promise<ActionResult> {
   const actor = await requireAdmin();
   if (!actor || !actor.id) return { ok: false, error: "غير مسموح." };
@@ -429,7 +483,7 @@ export async function adminRestoreBusinessAction(
   const rl = await withRateLimit(
     `admin-business-restore:${actor.id}`,
     120,
-    60 * 60 * 1000,
+    60 * 60 * 1000
   );
   if (!rl.ok) return { ok: false, error: "تجاوزت الحد المسموح." };
 
@@ -458,7 +512,10 @@ export async function adminRestoreBusinessAction(
     },
   });
   if (updated.count !== 1) {
-    return { ok: false, error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة." };
+    return {
+      ok: false,
+      error: "تغيّرت حالة العمل، حدّث الصفحة وأعد المحاولة.",
+    };
   }
 
   await recordAudit({
